@@ -57,6 +57,19 @@ class TL_H5P_AutoComplete {
 (function () {
     'use strict';
 
+    // Prevent the official learnpress-h5p plugin's own xAPI listener (lph5p.js)
+    // from also submitting completion — it only shows a "Complete" button (which
+    // we hide via CSS) when this is 'yes'; otherwise it fires a competing AJAX
+    // call + reload that races with ours.
+    if ( typeof lpH5pSettings !== 'undefined' ) {
+        lpH5pSettings.h5p_button_complete = 'yes';
+    }
+
+    // Guard: only fire once per page load regardless of how many xAPI events
+    // arrive (some content types, e.g. Arithmetic Quiz, emit both 'answered'
+    // and 'completed' at the top level for the same interaction).
+    var h5pAcFired = false;
+
     /**
      * Poll until H5P.externalDispatcher is available.
      * H5P loads asynchronously so we cannot assume it exists on DOMContentLoaded.
@@ -73,12 +86,18 @@ class TL_H5P_AutoComplete {
      * Send the auto-complete request to our PHP AJAX handler.
      */
     function autoComplete() {
+        if ( h5pAcFired ) {
+            return; // already submitted — ignore the duplicate event
+        }
+
         if ( typeof lpH5pSettings === 'undefined'
             || ! lpH5pSettings.id
             || ! lpH5pSettings.course_id
         ) {
             return;
         }
+
+        h5pAcFired = true;
 
         var body = new URLSearchParams( {
             action:     'h5p_auto_complete',
@@ -95,6 +114,7 @@ class TL_H5P_AutoComplete {
                 }
             } )
             .catch( function ( e ) {
+                h5pAcFired = false; // allow retry on genuine network failure
                 console.error( '[H5P Auto-Complete] AJAX error:', e );
             } );
     }
