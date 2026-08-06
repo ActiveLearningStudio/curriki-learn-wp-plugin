@@ -246,6 +246,10 @@ class Tiny_LXP_Platform
         $this->loader->add_action('save_post_lp_lesson', $lesson_extension, 'save_lesson_policy_meta', 30, 2);
         $this->loader->add_action('rest_lp_lesson_query', $lesson_extension, 'post_meta_request_params', 10, 2);
         $this->loader->add_action('rest_insert_lp_lesson', $lesson_extension, 'insert_post_api', 10, 2);
+        // wpautop (the_content @10) mangles <style>/<script> blocks pasted into lesson content;
+        // remove it only for that one pass — see TL_LearnPress_Lesson_Extension::remove_wpautop_for_lesson_content().
+        $this->loader->add_filter('the_content', $lesson_extension, 'remove_wpautop_for_lesson_content', 9);
+        $this->loader->add_filter('the_content', $lesson_extension, 'restore_wpautop_after_lesson_content', 11);
         $this->loader->add_action( 'plugins_loaded', $tl_h5p_extension, 'init', 20 );
         // $this->loader->add_action('wp_footer', $lesson_extension, 'render_js_debug_panel', 9999);
         // register_course_shortcodes and elementor/widget/render_content are registered

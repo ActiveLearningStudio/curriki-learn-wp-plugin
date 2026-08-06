@@ -863,4 +863,27 @@ class TL_LearnPress_Lesson_Extension {
 </div>
 		<?php
 	}
+
+	// Lesson content with raw <style>/<script> blocks pasted into the editor gets mangled by
+	// wpautop's <br />/<p> insertion. LearnPress core's LP_Abstract_Object_Data::get_content()
+	// (inc/abstracts/abstract-post-data.php) swaps global $post to the lesson before calling
+	// apply_filters('the_content', ...), so get_post_type() here reliably resolves to the lesson
+	// even though the page's queried object is the course (see LP4 URL gotcha in CLAUDE.md).
+	// wpautop is removed only for the one the_content pass rendering lesson content, then restored
+	// immediately after so every other post type keeps normal auto-paragraphing.
+	public function remove_wpautop_for_lesson_content( $content ) {
+		if ( TL_LESSON_CPT === get_post_type() ) {
+			remove_filter( 'the_content', 'wpautop' );
+		}
+
+		return $content;
+	}
+
+	public function restore_wpautop_after_lesson_content( $content ) {
+		if ( ! has_filter( 'the_content', 'wpautop' ) ) {
+			add_filter( 'the_content', 'wpautop' );
+		}
+
+		return $content;
+	}
 }
