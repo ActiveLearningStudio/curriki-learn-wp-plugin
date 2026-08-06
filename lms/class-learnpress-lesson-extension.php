@@ -904,6 +904,18 @@ class TL_LearnPress_Lesson_Extension {
 		$mce_init['wpautop']     = false;
 		$mce_init['verify_html'] = false;
 
+		// TinyMCE's default schema doesn't allow <style> as a child of <body>, so it strips or
+		// re-encodes it on Text->Visual switch. Explicitly whitelisting it here lets the Visual
+		// tab keep the tag as a live DOM node — the browser then applies the CSS in the editor
+		// iframe itself, so authors get a real preview instead of dead/escaped markup.
+		$mce_init['valid_children'] = isset( $mce_init['valid_children'] )
+			? $mce_init['valid_children'] . ',+body[style]'
+			: '+body[style]';
+
+		$mce_init['extended_valid_elements'] = isset( $mce_init['extended_valid_elements'] )
+			? $mce_init['extended_valid_elements'] . ',style[type]'
+			: 'style[type]';
+
 		return $mce_init;
 	}
 }
