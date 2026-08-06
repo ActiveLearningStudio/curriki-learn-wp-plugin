@@ -250,6 +250,9 @@ class Tiny_LXP_Platform
         // remove it only for that one pass — see TL_LearnPress_Lesson_Extension::remove_wpautop_for_lesson_content().
         $this->loader->add_filter('the_content', $lesson_extension, 'remove_wpautop_for_lesson_content', 9);
         $this->loader->add_filter('the_content', $lesson_extension, 'restore_wpautop_after_lesson_content', 11);
+        // TinyMCE's own Visual<->Text reformatting for the lesson content editor — see
+        // TL_LearnPress_Lesson_Extension::preserve_lesson_editor_html().
+        $this->loader->add_filter('tiny_mce_before_init', $lesson_extension, 'preserve_lesson_editor_html', 10, 2);
         $this->loader->add_action( 'plugins_loaded', $tl_h5p_extension, 'init', 20 );
         // $this->loader->add_action('wp_footer', $lesson_extension, 'render_js_debug_panel', 9999);
         // register_course_shortcodes and elementor/widget/render_content are registered

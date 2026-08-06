@@ -886,4 +886,24 @@ class TL_LearnPress_Lesson_Extension {
 
 		return $content;
 	}
+
+	// Classic Editor's TinyMCE re-runs its own wpautop-equivalent HTML reformatting every time
+	// the lesson content editor switches between Visual and Text mode, independent of the
+	// render-side the_content filter above. Scoped to the lesson's main "content" editor only —
+	// other post types and other editor instances (excerpt, meta-box WYSIWYG fields) are untouched.
+	public function preserve_lesson_editor_html( $mce_init, $editor_id ) {
+		if ( 'content' !== $editor_id ) {
+			return $mce_init;
+		}
+
+		$screen = get_current_screen();
+		if ( ! $screen || TL_LESSON_CPT !== $screen->post_type ) {
+			return $mce_init;
+		}
+
+		$mce_init['wpautop']     = false;
+		$mce_init['verify_html'] = false;
+
+		return $mce_init;
+	}
 }
