@@ -1,0 +1,200 @@
+# Zero-Knowledge Student Enrollment — Zone A Context
+
+Session context: completed August 2026.
+
+Lets a student enroll in a LearnPress course by redeeming a class registration code, **without the server collecting or storing any student PII** — the COPPA/FERPA "zero knowledge" model requested by the client.
+
+Builds on [Class–Course Association](class-course-association-context.md) and [Student Identity & Access](student-identity-and-access-context.md).
+
+---
+
+## 1. The two zones
+
+| Zone | Contents | Who can read it |
+|---|---|---|
+| **A — server (pseudonymous)** | Token WP users, `lxp_class_members`, LearnPress enrollment, quiz/capstone/workbook responses | Curriki, fully queryable. Contains **no student PII**. |
+| **B — encrypted, client-only** | The `alias → real name` map | The teacher's browser only |
+
+**Zone B now exists** (passphrase-based) — see [student-privacy-zone-b-context.md](student-privacy-zone-b-context.md). Names are keyed on `lxp_class_members.id`, which is the only coupling between the two zones.
+
+**Consent basis:** the teacher issuing the code *is* the COPPA school-consent gate. A valid code is treated as authorized enrollment, and the issuing `tl_teacher` / `tl_school` are recorded on every membership row as consent provenance.
+
+> Legal note: the FTC's 2025 COPPA amendments (effective 22 April 2026) deliberately **did not codify** a school-authorization exception — the Commission deferred to the Dept. of Education's pending FERPA rulemaking. The school-permission pathway rests on FTC guidance, not rule text, so DPA language must not cite a codified exception.
+
+---
+
+## 2. What was reused, not rebuilt
+
+The client's spec assumed a greenfield `lxp_class` CPT and a new `lxp_student` role. Both already existed:
+
+| Spec asked for | Used instead |
+|---|---|
+| new `lxp_class` CPT | existing `tl_class` ([class-class-post-type.php](../lms/class-class-post-type.php)) |
+| `lxp_class_reg_code` | existing `lxp_class_code` (6-char, unambiguous alphabet) |
+| `lxp_class_course_id` (single) | existing `lxp_class_course_ids` (multi) |
+| new `lxp_student` role | already registered in [class-tiny-lxp-platform-tool.php:717](../includes/class-tiny-lxp-platform-tool.php#L717) |
+
+---
+
+## 3. Two deliberate divergences from the spec
+
+### 3a. `parent_id` is **not** the class ID
+
+The spec asked for `learnpress_user_items.parent_id = lxp_class` post ID. LearnPress already owns that column: for a course row it is `0`, and for lesson/quiz rows it holds the parent **course** `user_item_id`. Writing a class post ID there would collide with LP's own child-item lookups.
+
+**Instead:** `parent_id` stays `0`; the class link lives in `learnpress_user_itemmeta` under **`_lxp_class_id`**, plus the `lxp_class_members` row. Query it via `TL_Enrollment_Repository::get_courses_for_class()`.
+
+### 3b. "No free-text real name" is enforced by removing the text field
+
+No regex can reject "Maria Garcia" while accepting "Student Fourteen". So classes default to **`alias_mode = assigned`**: the student picks an unclaimed label from the teacher's seat pool via a dropdown — there is no free-text input to abuse. `open` mode (student types a nickname) is opt-in per class and backstopped by `Rest_Lxp_Class_Redemption::looks_like_pii()`, which rejects email- and phone-shaped values.
+
+---
+
+## 4. Data model
+
+### New meta on `tl_class`
+
+| Key | Value |
+|---|---|
+| `lxp_class_max_seats` | int; `0` = unlimited |
+| `lxp_class_code_expires` | datetime; empty = never |
+| `lxp_class_code_revoked` | `'1'` or `''` |
+| `lxp_class_alias_mode` | `assigned` (default) or `open` |
+| `lxp_class_seat_labels` | repeating — the alias pool (`Student 01`…) |
+
+Written through the existing `Rest_Lxp_Class::create()` (behind `POST /lms/v1/classes/save`), guarded by a `lxp_class_code_controls` hidden field so checkbox-absence isn't misread as "unchecked" by other callers. Returned by `get_one()`.
+
+### New meta on `tl_school`
+
+`lxp_school_token_mode` — when set, the legacy name-collecting flows are refused (see §7).
+
+### New table `{prefix}lxp_class_members`
+
+Created by `tl_lxp_install_tables()` in [TinyLxp-wp-plugin.php](../TinyLxp-wp-plugin.php), run both from `on_activate()` and from a `tl_lxp_db_version` check on `plugins_loaded` — so **no deactivate/reactivate is needed on production**. Bump `TL_LXP_DB_VERSION` when the schema changes.
+
+```
+id, class_id, student_post_id, student_user_id, alias_label,
+joined_via('code'|'roster'), status('active'|'removed'),
+claim_token_hash, claim_issued_at, claim_last_used,
+consent_teacher_id, consent_school_id, created_at
+UNIQUE (class_id, alias_label), UNIQUE (claim_token_hash)
+```
+
+### Token accounts
+
+| Object | Notable fields |
+|---|---|
+| WP user | `user_login` = `stu_<12 hex>`, `user_email` = `{login}@students.curriki.local`, `display_name` = alias, role `lxp_student`. **No `first_name` / `last_name`.** Usermeta: `lxp_is_token_student=1`, `lxp_no_marketing=1`, `lxp_class_id` |
+| `tl_student` post | `post_title` = alias (never a name), `student_id` meta = the UUID login, `lxp_student_admin_id`, `lxp_student_school_id`, `lxp_teacher_id`, `grades` inherited from the class. **No `lxp_student_password`** |
+
+> `student_id` is now an **opaque internal handle**, not a district SIS number. A real SIS ID is a stable external identifier — anyone with SIS access could re-identify every row — so it is never collected. The meta key is kept because every dashboard, grade and class query resolves students through it.
+
+The student post ID is appended to the class's `lxp_student_ids`, so the existing Student Courses widget and teacher dashboards pick token students up with no changes.
+
+---
+
+## 5. REST API
+
+All in `Rest_Lxp_Class_Redemption` ([class-redemption.php](../lms/lms-rest-apis/class-redemption.php)), registered in `LMS_REST_API::init()`.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /lms/v1/class/redeem` | public | code + alias → provision + enroll + sign in |
+| `POST /lms/v1/class/claim` | public | claim token → resume account, no new seat |
+| `POST /lms/v1/class/seats` | public | open seat labels for a code (feeds the dropdown) |
+| `POST /lms/v1/class/code/settings` | teacher | seats, expiry, revoke, alias mode, regenerate |
+| `POST /lms/v1/class/roster` | teacher | roster view |
+| `POST /lms/v1/class/roster/provision` | teacher | pre-create N seats (or explicit aliases) |
+| `POST /lms/v1/class/member/reissue` | teacher | mint a fresh claim link |
+
+Teacher routes check `can_manage_class()` — `manage_options`, or the current user being the class's `lxp_class_teacher_id` → `lxp_teacher_admin_id`.
+
+### `redeem()` — ordered, fail-closed
+
+1. rate limit → `rate_limited`
+2. code resolves to a published `tl_class` → `invalid_code`
+3. not revoked → `code_revoked`
+4. not expired → `code_expired`
+5. active members < `max_seats` → `class_full`
+6. alias valid + available → `bad_alias` / `seat_taken`
+
+Then **one atomic unit**: `START TRANSACTION` → WP user → `tl_student` post → meta → membership row → `lxp_student_ids` → enroll in every `lxp_class_course_ids` → `COMMIT`. On failure: `ROLLBACK` **plus explicit compensating deletes**, because some hosts still run LearnPress tables on MyISAM where the transaction alone would not roll the enrollment back.
+
+The client always receives the **same generic message**; the reason is returned as a machine `code` for logging only, so failures cannot be told apart by a guesser.
+
+---
+
+## 6. Returning students
+
+Each token account gets a per-student **claim link** (`?claim=<48 hex>`), shown once at provisioning. Only its SHA-256 is stored (`claim_token_hash`), so the server cannot reproduce a lost link — the teacher re-issues via `/class/member/reissue`, which rotates the secret and invalidates the old link.
+
+The class code alone is **not** sufficient to log back in: classmates share it. Redeeming again would consume a second seat, which is why the join widget stashes the claim URL in `localStorage` keyed by class code.
+
+---
+
+## 7. The legacy student flows are gated, not just unused
+
+`import()` and `save_update()` in [students.php](../lms/lms-rest-apis/students.php) write real names into `post_title` and `wp_users.first_name`/`last_name`, plus a **plaintext password** into `lxp_student_password`. Left open, a teacher could undo the entire privacy model by picking the wrong upload button.
+
+Both now call `Rest_Lxp_Student::is_token_mode_school()` and return **403** when the school has `lxp_school_token_mode` set. Schools without the flag are completely unaffected — the existing 4-column CSV import and Student-ID kiosk login behave exactly as before.
+
+Toggle: **Admin → Schools → edit → Student privacy** checkbox (`admin-school-modal.php`, saved via `/shools/save`, read back via `schools.php::get_one()`).
+
+> The existing `access_login()` kiosk flow depends on plaintext `lxp_student_password` and is **unchanged** — it simply never applies to token accounts, which have no such meta.
+
+---
+
+## 8. UI
+
+| Surface | File |
+|---|---|
+| Join form (student) | [lxp-class-join-widget.php](../includes/widgets/lxp-class-join-widget.php) — Elementor `lxp-class-join` |
+| Roster + claim links (teacher) | [class-roster-modal.php](../lms/templates/tinyLxpTheme/lxp/class-roster-modal.php) |
+| Code controls | `teacher-class-modal.php`, `admin-class-modal.php` |
+| Seats badge + Roster button | `teacher-classes.php`, `admin-classes.php` |
+| Token-mode toggle | `admin-school-modal.php`, `admin-schools.php` |
+
+**The join widget contains no name, email, DOB or password input anywhere in its markup.** That absence is the form-level enforcement the spec requires — it is not a validation rule that can be bypassed. It also handles `?claim=` (resume) and `?class_code=` (deep link) from the URL.
+
+Claim links can only be printed in the session they were minted, since the server holds hashes.
+
+---
+
+## 9. Anti-abuse
+
+- Per-IP: 10 attempts / 10 min. Per-code: 60 / hour. Transient-backed.
+- **The client IP is hashed (`wp_hash()`) and used only as a transient key — never stored.** It may itself be a minor's personal data.
+- Audit events fire on the `tl_lxp_enrollment_audit` action (`event, class_id, user_id, joined_via, timestamp`) — deliberately **no IP, no device fingerprint**.
+
+---
+
+## 10. Marketing wall — partial by necessity
+
+`noptin` / Mailgun do not exist anywhere in this plugin, so the wall cannot be enforced here. What ships:
+
+- `lxp_no_marketing=1` set atomically with account creation
+- `lxp_is_no_marketing_user( $user_id )` and `lxp_get_marketing_excluded_users()` in [lxp/functions.php](../lms/templates/tinyLxpTheme/lxp/functions.php)
+- filters `tl_lxp_user_no_marketing`, `tl_lxp_marketing_excluded_users`
+
+**Enforcement in the mailing stack is a separate task on whichever plugin owns it.** This one can only flag.
+
+---
+
+## 11. Not built yet
+
+- **WebAuthn PRF unlock** — the vault ships passphrase-only. PRF is an additive upgrade; see §7 of the Zone B doc.
+- Parental notice / opt-out flow (diagram 2), deletion-request routing, DPA text.
+- Marketing enforcement in whichever plugin owns noptin/Mailgun (§10).
+
+---
+
+## 12. Gotchas
+
+1. `parent_id` on `learnpress_user_items` is **0**, not the class ID — see §3a. Use `_lxp_class_id` itemmeta.
+2. Enrollment is written **behind LearnPress's back**, so `TL_Enrollment_Repository::flush_lp_caches()` must run after every insert or `has_enrolled_course()` returns stale `false`.
+3. Claim links are unrecoverable by design. "Print claim slips" only prints links minted in the current modal session.
+4. `lxp/functions.php` is **not** loaded in REST context — REST callbacks must use `TL_Class_Member_Repository` directly rather than `lxp_get_class_seats_taken()`.
+5. Seat labels auto-grow only for unlimited-seat classes. A capped class that runs out returns `class_full`; raise `lxp_class_max_seats` (which re-syncs the pool) rather than editing labels.
+6. `alias_mode = open` still allows a determined student to type something name-like. Only `assigned` is structurally safe — keep it as the default.
+7. **Seat-count race:** two students submitting simultaneously against the last seat can over-fill a class by one. The `UNIQUE (class_id, alias_label)` index closes the *alias* race hard, so nobody ever shares a seat label; only the count can drift, and only by one. Accepted rather than serialised behind a lock — over-enrolling one student is far less damaging than blocking a whole class on a lock timeout.
+8. Rate limiting uses two separate counters: `write` (redeem/claim, 10 per 10 min) and `lookup` (seat reads, 60 per 10 min). The join form calls the lookup as the student types, so it must never consume the write budget — and the widget also dedupes repeat lookups of the same code.

@@ -205,6 +205,28 @@ class Rest_Lxp_Class
 			update_post_meta( $class_post_id, 'lxp_class_code', self::generate_class_code() );
 		}
 
+		// ===== Registration-code controls (zero-PII enrollment) ==============
+		// Seat cap, expiry, revoke and alias mode gate the code-redemption
+		// endpoint. See Rest_Lxp_Class_Redemption + docs/student-privacy-zone-a-context.md
+		if ( null !== $request->get_param('lxp_class_max_seats') ) {
+			update_post_meta($class_post_id, 'lxp_class_max_seats', absint($request->get_param('lxp_class_max_seats')));
+		}
+
+		if ( null !== $request->get_param('lxp_class_code_expires') ) {
+			$expires = trim( (string) $request->get_param('lxp_class_code_expires') );
+			update_post_meta($class_post_id, 'lxp_class_code_expires', $expires ? sanitize_text_field($expires) : '');
+		}
+
+		// Checkboxes only post when checked, so treat an absent value as unchecked
+		// whenever the modal declares it submitted the code-controls block.
+		if ( $request->get_param('lxp_class_code_controls') ) {
+			$revoked = filter_var($request->get_param('lxp_class_code_revoked'), FILTER_VALIDATE_BOOLEAN);
+			update_post_meta($class_post_id, 'lxp_class_code_revoked', $revoked ? '1' : '');
+
+			$alias_mode = 'open' === $request->get_param('lxp_class_alias_mode') ? 'open' : 'assigned';
+			update_post_meta($class_post_id, 'lxp_class_alias_mode', $alias_mode);
+		}
+
 		$grade = $request->get_param('grade') && $request->get_param('grade') != '0' ? $request->get_param('grade') : '';
 		update_post_meta($class_post_id, 'grade', $grade);
 
@@ -289,6 +311,14 @@ class Rest_Lxp_Class
 		$class->edlink_class_sec_id = get_post_meta($class_id, 'edlink_class_sec_id', true);
 		$class->lxp_class_course_ids = get_post_meta($class_id, 'lxp_class_course_ids');
 		$class->lxp_class_code = get_post_meta($class_id, 'lxp_class_code', true);
+		// Registration-code controls used by the code-redemption flow.
+		$class->lxp_class_max_seats = (int) get_post_meta($class_id, 'lxp_class_max_seats', true);
+		$class->lxp_class_code_expires = get_post_meta($class_id, 'lxp_class_code_expires', true);
+		$class->lxp_class_code_revoked = (bool) get_post_meta($class_id, 'lxp_class_code_revoked', true);
+		$alias_mode = get_post_meta($class_id, 'lxp_class_alias_mode', true);
+		$class->lxp_class_alias_mode = 'open' === $alias_mode ? 'open' : 'assigned';
+		$members = new TL_Class_Member_Repository();
+		$class->lxp_class_seats_taken = $members->count_active($class_id);
 		return wp_send_json_success(array("class" => $class));
 	}
 

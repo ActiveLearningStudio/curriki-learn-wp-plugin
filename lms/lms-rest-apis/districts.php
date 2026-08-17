@@ -324,8 +324,56 @@ class Rest_Lxp_District
 			}
 		}
 
+		// ===== Roster vault escrow (Zone B recovery) ========================
+		// An RSA public key the district publishes so teachers' browsers can
+		// wrap a recovery copy of each class DEK. The matching PRIVATE key must
+		// live in the district's KMS or offline safe — never here. Without it,
+		// a forgotten passphrase means that class's names are gone for good.
+		if ( null !== $request->get_param('lxp_district_escrow_pubkey') ) {
+			$pem = trim( (string) $request->get_param('lxp_district_escrow_pubkey') );
+			if ( '' === $pem ) {
+				delete_post_meta($district_post_id, 'lxp_district_escrow_pubkey');
+			} else if ( self::is_valid_public_key($pem) ) {
+				update_post_meta($district_post_id, 'lxp_district_escrow_pubkey', $pem);
+			} else {
+				return wp_send_json_error('That does not look like a valid RSA public key (expected a PEM "PUBLIC KEY" block).', 400);
+			}
+		}
+
         return wp_send_json_success("District Saved!");
     }
+
+	/**
+	 * Validate an escrow public key before storing it.
+	 *
+	 * A malformed key would fail silently in the browser and leave classes with
+	 * no recovery copy, so it is rejected at the door instead. Only the PUBLIC
+	 * half is ever accepted — a pasted private key is refused outright.
+	 *
+	 * @param  string $pem
+	 * @return bool
+	 */
+	private static function is_valid_public_key($pem) {
+		if ( false !== strpos($pem, 'PRIVATE KEY') ) {
+			return false;
+		}
+		if ( ! preg_match('/-----BEGIN (RSA )?PUBLIC KEY-----/', $pem) ) {
+			return false;
+		}
+		if ( ! function_exists('openssl_pkey_get_public') ) {
+			// No OpenSSL to verify with — the PEM header check is all we have.
+			return true;
+		}
+
+		$key = openssl_pkey_get_public($pem);
+		if ( ! $key ) {
+			return false;
+		}
+
+		$details = openssl_pkey_get_details($key);
+
+		return isset($details['type']) && OPENSSL_KEYTYPE_RSA === $details['type'];
+	}
 
 	public static function edlink_create($request) {
 		// ============= District Post =================================
@@ -432,6 +480,8 @@ class Rest_Lxp_District
 		$admin = get_userdata(get_post_meta($district_id, 'lxp_district_admin', true));
 		$admin->data->first_name = get_user_meta($admin->ID, 'first_name', true);
 		$admin->data->last_name = get_user_meta($admin->ID, 'last_name', true);
+		// Roster-vault escrow public key (safe to expose — it is a public key).
+		$district->lxp_district_escrow_pubkey = (string) get_post_meta($district_id, 'lxp_district_escrow_pubkey', true);
 		return wp_send_json_success(array("district" => $district, "admin" => $admin));
 	}
 }

@@ -11,6 +11,8 @@ Covers four connected changes built on top of the [Class–Course Association](c
 
 See also: [csv-student-import-context.md](csv-student-import-context.md).
 
+> **Superseded for token-mode schools (Aug 2026).** Everything below describes the *named-student* model, which is still the default. Schools with `lxp_school_token_mode` set on their `tl_school` post use zero-PII enrollment instead: students are provisioned only via class-code redemption, `student_id` is an opaque `stu_<hex>` handle rather than a school ID, and there is no `lxp_student_password`. `import()` and `save_update()` return 403 for those schools. See [student-privacy-zone-a-context.md](student-privacy-zone-a-context.md).
+
 ---
 
 ## 1. Student Identity Model

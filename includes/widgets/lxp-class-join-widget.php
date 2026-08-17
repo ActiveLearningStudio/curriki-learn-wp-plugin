@@ -1,0 +1,380 @@
+<?php
+/**
+ * LXP Class Join — zero-PII student enrollment form (Zone A).
+ *
+ * A student enters a class registration code and picks a seat label. No name,
+ * email, date of birth or password field exists anywhere in this markup — that
+ * absence IS the form-level enforcement the privacy spec requires. The teacher's
+ * act of issuing the code is the COPPA school-consent gate.
+ *
+ * Also handles the claim-link return path: a `?claim=` query arg resumes the
+ * student's existing token account without consuming a second seat.
+ *
+ * @see docs/student-privacy-zone-a-context.md
+ */
+
+namespace Edudeme\Elementor;
+
+use Elementor\Controls_Manager;
+
+class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
+
+	public function get_name()       { return 'lxp-class-join'; }
+	public function get_title()      { return esc_html__( 'LXP Class Join', 'tinylxp' ); }
+	public function get_icon()       { return 'eicon-form-horizontal'; }
+	public function get_categories() { return [ 'general' ]; }
+
+	protected function register_controls() {
+
+		// ── Content ───────────────────────────────────────────────────────
+		$this->start_controls_section( 'section_content', [
+			'label' => esc_html__( 'Content', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_CONTENT,
+		] );
+
+		$this->add_control( 'heading', [
+			'label'   => esc_html__( 'Heading', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Join your class', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'code_label', [
+			'label'   => esc_html__( 'Code Field Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Class code', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'alias_label', [
+			'label'   => esc_html__( 'Seat Field Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Pick your seat', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'button_label', [
+			'label'   => esc_html__( 'Button Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Join', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'privacy_note', [
+			'label'       => esc_html__( 'Privacy Note', 'tinylxp' ),
+			'type'        => Controls_Manager::TEXTAREA,
+			'default'     => esc_html__( 'We never ask for your name, email or birthday.', 'tinylxp' ),
+			'description' => esc_html__( 'Shown under the form. Leave blank to hide.', 'tinylxp' ),
+		] );
+
+		$this->end_controls_section();
+
+		// ── Style ─────────────────────────────────────────────────────────
+		$this->start_controls_section( 'section_style', [
+			'label' => esc_html__( 'Style', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'box_bg_color', [
+			'label'   => esc_html__( 'Box Background', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#ffffff',
+		] );
+
+		$this->add_control( 'text_color', [
+			'label'   => esc_html__( 'Text Color', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#3c4043',
+		] );
+
+		$this->add_control( 'btn_bg_color', [
+			'label'   => esc_html__( 'Button Background', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#1a73e8',
+		] );
+
+		$this->add_control( 'btn_text_color', [
+			'label'   => esc_html__( 'Button Text', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#ffffff',
+		] );
+
+		$this->end_controls_section();
+	}
+
+	protected function render() {
+		$settings = $this->get_settings_for_display();
+
+		$uid           = 'lxp-cj-' . $this->get_id();
+		$heading       = esc_html( $settings['heading'] );
+		$code_label    = esc_html( $settings['code_label'] );
+		$alias_label   = esc_html( $settings['alias_label'] );
+		$button_label  = esc_html( $settings['button_label'] );
+		$privacy_note  = esc_html( $settings['privacy_note'] );
+
+		$box_bg    = esc_attr( $settings['box_bg_color'] );
+		$text_col  = esc_attr( $settings['text_color'] );
+		$btn_bg    = esc_attr( $settings['btn_bg_color'] );
+		$btn_text  = esc_attr( $settings['btn_text_color'] );
+
+		$redeem_url = esc_url_raw( rest_url( 'lms/v1/class/redeem' ) );
+		$claim_url  = esc_url_raw( rest_url( 'lms/v1/class/claim' ) );
+		$seats_url  = esc_url_raw( rest_url( 'lms/v1/class/seats' ) );
+
+		if ( is_user_logged_in() ) {
+			echo '<div class="lxp-cj-signed-in" style="text-align:center;color:' . $text_col . '">'
+				. esc_html__( 'You are signed in.', 'tinylxp' )
+				. '</div>';
+			return;
+		}
+		?>
+		<style>
+		#<?php echo esc_attr( $uid ); ?> {
+			max-width: 380px;
+			margin: 0 auto;
+			background: <?php echo $box_bg; ?>;
+			color: <?php echo $text_col; ?>;
+			border-radius: 8px;
+			box-shadow: 0 1px 3px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.12);
+			padding: 24px;
+			font-family: 'Google Sans', Roboto, Arial, sans-serif;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-heading {
+			font-size: 18px;
+			font-weight: 500;
+			margin: 0 0 16px;
+			color: <?php echo $text_col; ?>;
+		}
+		#<?php echo esc_attr( $uid ); ?> label {
+			display: block;
+			font-size: 13px;
+			margin-bottom: 6px;
+			color: <?php echo $text_col; ?>;
+		}
+		#<?php echo esc_attr( $uid ); ?> input[type="text"],
+		#<?php echo esc_attr( $uid ); ?> select {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 10px 12px;
+			font-size: 15px;
+			border: 1px solid #dadce0;
+			border-radius: 6px;
+			margin-bottom: 16px;
+			background: #fff;
+		}
+		#<?php echo esc_attr( $uid ); ?> input[type="text"].lxp-cj-code {
+			text-transform: uppercase;
+			letter-spacing: 2px;
+			font-weight: 600;
+		}
+		#<?php echo esc_attr( $uid ); ?> button {
+			width: 100%;
+			padding: 10px 16px;
+			font-size: 15px;
+			font-weight: 500;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			background: <?php echo $btn_bg; ?>;
+			color: <?php echo $btn_text; ?>;
+			transition: opacity .15s ease;
+		}
+		#<?php echo esc_attr( $uid ); ?> button:hover { opacity: .92; }
+		#<?php echo esc_attr( $uid ); ?> button[disabled] { opacity: .6; cursor: default; }
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-msg {
+			margin-top: 12px;
+			font-size: 13px;
+			min-height: 16px;
+			color: #d93025;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-note {
+			margin-top: 14px;
+			font-size: 12px;
+			color: #5f6368;
+			text-align: center;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-seat-wrap { display: none; }
+		</style>
+
+		<form class="lxp-cj" id="<?php echo esc_attr( $uid ); ?>" autocomplete="off">
+			<?php if ( $heading ) : ?>
+			<div class="lxp-cj-heading"><?php echo $heading; ?></div>
+			<?php endif; ?>
+
+			<label for="<?php echo esc_attr( $uid ); ?>-code"><?php echo $code_label; ?></label>
+			<input type="text" id="<?php echo esc_attr( $uid ); ?>-code" class="lxp-cj-code"
+			       maxlength="6" required autocapitalize="characters" spellcheck="false" />
+
+			<div class="lxp-cj-seat-wrap">
+				<label for="<?php echo esc_attr( $uid ); ?>-seat"><?php echo $alias_label; ?></label>
+				<select id="<?php echo esc_attr( $uid ); ?>-seat" class="lxp-cj-seat"></select>
+				<input type="text" class="lxp-cj-alias" style="display:none" maxlength="32"
+				       placeholder="<?php echo esc_attr__( 'Choose a nickname', 'tinylxp' ); ?>" />
+			</div>
+
+			<button type="submit" class="lxp-cj-btn"><?php echo $button_label; ?></button>
+			<div class="lxp-cj-msg" aria-live="polite"></div>
+			<?php if ( $privacy_note ) : ?>
+			<div class="lxp-cj-note"><?php echo $privacy_note; ?></div>
+			<?php endif; ?>
+		</form>
+
+		<script>
+		(function() {
+			var form = document.getElementById(<?php echo wp_json_encode( $uid ); ?>);
+			if (!form) return;
+
+			var codeInput = form.querySelector('.lxp-cj-code');
+			var seatWrap  = form.querySelector('.lxp-cj-seat-wrap');
+			var seatSel   = form.querySelector('.lxp-cj-seat');
+			var aliasIn   = form.querySelector('.lxp-cj-alias');
+			var btn       = form.querySelector('.lxp-cj-btn');
+			var msg       = form.querySelector('.lxp-cj-msg');
+
+			var redeemUrl = <?php echo wp_json_encode( $redeem_url ); ?>;
+			var claimUrl  = <?php echo wp_json_encode( $claim_url ); ?>;
+			var seatsUrl  = <?php echo wp_json_encode( $seats_url ); ?>;
+
+			var params    = new URLSearchParams(window.location.search);
+			var aliasMode = 'assigned';
+
+			function fail(text) {
+				msg.textContent = text || 'Something went wrong. Please try again.';
+				btn.removeAttribute('disabled');
+			}
+
+			function post(url, fields) {
+				var body = new FormData();
+				Object.keys(fields).forEach(function(k) { body.append(k, fields[k]); });
+				return fetch(url, { method: 'POST', body: body, credentials: 'same-origin' })
+					.then(function(res) {
+						return res.json().then(function(j) { return { ok: res.ok, json: j }; });
+					});
+			}
+
+			function errorText(r) {
+				var d = r.json && r.json.data;
+				if (typeof d === 'string') { return d; }
+				if (d && typeof d.message === 'string') { return d.message; }
+				return 'That class code could not be used. Please check it with your teacher.';
+			}
+
+			// --- Returning student: a claim link resumes the same account. ----
+			var claimToken = params.get('claim');
+			if (claimToken) {
+				msg.style.color = '#5f6368';
+				msg.textContent = 'Signing you in…';
+				btn.setAttribute('disabled', 'disabled');
+				post(claimUrl, { claim_token: claimToken }).then(function(r) {
+					if (r.ok && r.json && r.json.success) {
+						window.location.href = r.json.data.redirect_url;
+					} else {
+						msg.style.color = '#d93025';
+						fail('That link is no longer valid. Ask your teacher for a new one.');
+					}
+				}).catch(function() {
+					msg.style.color = '#d93025';
+					fail();
+				});
+				return;
+			}
+
+			// --- Load the seat list once a full code is entered. --------------
+			function loadSeats(code) {
+				return post(seatsUrl, { class_code: code }).then(function(r) {
+					if (!r.ok || !r.json || !r.json.success) {
+						seatWrap.style.display = 'none';
+						return false;
+					}
+
+					var d = r.json.data;
+					aliasMode = d.alias_mode;
+
+					if (d.is_full) {
+						msg.textContent = 'This class is full. Please check with your teacher.';
+						seatWrap.style.display = 'none';
+						return false;
+					}
+
+					if (aliasMode === 'open') {
+						seatSel.style.display = 'none';
+						aliasIn.style.display = '';
+					} else {
+						seatSel.style.display = '';
+						aliasIn.style.display = 'none';
+						seatSel.innerHTML = '';
+						(d.open_seats || []).forEach(function(label) {
+							var opt = document.createElement('option');
+							opt.value = label;
+							opt.textContent = label;
+							seatSel.appendChild(opt);
+						});
+						if (!seatSel.options.length) {
+							msg.textContent = 'No seats are free in this class. Please check with your teacher.';
+							seatWrap.style.display = 'none';
+							return false;
+						}
+					}
+
+					msg.textContent = '';
+					seatWrap.style.display = '';
+					return true;
+				});
+			}
+
+			// Only look a code up once — retyping the same 6 chars must not
+			// spam the endpoint and burn the student's own rate-limit budget.
+			var lastLookedUp = '';
+
+			codeInput.addEventListener('input', function() {
+				codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+				if (codeInput.value.length === 6) {
+					if (codeInput.value === lastLookedUp) { return; }
+					lastLookedUp = codeInput.value;
+					loadSeats(codeInput.value);
+				} else {
+					seatWrap.style.display = 'none';
+				}
+			});
+
+			// Deep link: ?class_code=XYZ pre-fills and loads seats immediately.
+			var preCode = params.get('class_code');
+			if (preCode) {
+				codeInput.value = preCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+				lastLookedUp = codeInput.value;
+				loadSeats(codeInput.value);
+			}
+
+			// --- Join. -------------------------------------------------------
+			form.addEventListener('submit', function(e) {
+				e.preventDefault();
+				msg.style.color = '#d93025';
+				msg.textContent = '';
+
+				var code  = codeInput.value.trim().toUpperCase();
+				var alias = aliasMode === 'open' ? aliasIn.value.trim() : seatSel.value;
+
+				if (!code) { return; }
+				if (!alias) {
+					msg.textContent = 'Please choose your seat.';
+					return;
+				}
+
+				btn.setAttribute('disabled', 'disabled');
+
+				post(redeemUrl, { class_code: code, alias_label: alias }).then(function(r) {
+					if (r.ok && r.json && r.json.success) {
+						// The claim link is shown once — stash it so the student
+						// can return to this account on their next visit.
+						try {
+							window.localStorage.setItem('lxp_claim_' + code, r.json.data.claim_url);
+						} catch (err) { /* private mode — non-fatal */ }
+						window.location.href = r.json.data.redirect_url;
+					} else {
+						fail(errorText(r));
+					}
+				}).catch(function() {
+					fail();
+				});
+			});
+		})();
+		</script>
+		<?php
+	}
+}

@@ -1449,4 +1449,101 @@ if (! function_exists('get_custom_role')) {
     }
 }
 
+// =============================================================================
+// Zero-PII token students (Zone A)
+// See docs/student-privacy-zone-a-context.md
+// =============================================================================
+
+/**
+ * Seats currently consumed on a class (active token members).
+ *
+ * @param  int $class_id tl_class post ID.
+ * @return int
+ */
+function lxp_get_class_seats_taken($class_id)
+{
+    global $wpdb;
+    $table = $wpdb->prefix . 'lxp_class_members';
+
+    return (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$table} WHERE class_id = %d AND status = %s",
+        absint($class_id),
+        'active'
+    ));
+}
+
+/**
+ * Whether a WP user is a pseudonymous token student (no PII on file).
+ *
+ * @param  int $user_id
+ * @return bool
+ */
+function lxp_is_token_student($user_id = 0)
+{
+    $user_id = $user_id ? absint($user_id) : get_current_user_id();
+
+    return $user_id && (bool) get_user_meta($user_id, 'lxp_is_token_student', true);
+}
+
+/**
+ * Whether a school has opted into token mode.
+ *
+ * When on, the legacy name-collecting student flows (CSV import, Manage
+ * Students) refuse to write first/last name or a plaintext password.
+ *
+ * @param  int $school_post_id tl_school post ID.
+ * @return bool
+ */
+function lxp_school_is_token_mode($school_post_id)
+{
+    return (bool) get_post_meta(absint($school_post_id), 'lxp_school_token_mode', true);
+}
+
+/**
+ * Whether a user must be excluded from every marketing list.
+ *
+ * Token accounts are flagged `lxp_no_marketing` at creation. Note that no
+ * mailing integration lives in this plugin — this helper (and the
+ * `tl_lxp_marketing_excluded_users` filter) is the contract that whichever
+ * plugin owns noptin/Mailgun must honour.
+ *
+ * @param  int $user_id
+ * @return bool
+ */
+function lxp_is_no_marketing_user($user_id)
+{
+    $user_id = absint($user_id);
+    $blocked = (bool) get_user_meta($user_id, 'lxp_no_marketing', true);
+
+    /**
+     * Filter whether a user is walled off from marketing.
+     *
+     * @param bool $blocked
+     * @param int  $user_id
+     */
+    return (bool) apply_filters('tl_lxp_user_no_marketing', $blocked, $user_id);
+}
+
+/**
+ * All user IDs that must never receive marketing email.
+ *
+ * @return int[]
+ */
+function lxp_get_marketing_excluded_users()
+{
+    $ids = get_users(array(
+        'meta_key'   => 'lxp_no_marketing',
+        'meta_value' => 1,
+        'fields'     => 'ID',
+        'number'     => -1,
+    ));
+
+    /**
+     * Filter the marketing exclusion list.
+     *
+     * @param int[] $ids
+     */
+    return array_map('absint', (array) apply_filters('tl_lxp_marketing_excluded_users', $ids));
+}
+
 ?>

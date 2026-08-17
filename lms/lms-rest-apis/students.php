@@ -526,12 +526,41 @@ class Rest_Lxp_Student
 		return wp_send_json_success(['message' => 'Students successfully updated with teacher ID.']);
 	}
 
-	public static function save_update($request) {		
-		
+	/**
+	 * Whether a school has opted into zero-PII token mode.
+	 *
+	 * In token mode the name-collecting student flows are closed: students are
+	 * provisioned only through the class code-redemption endpoint, which stores
+	 * no name, email or plaintext password.
+	 *
+	 * @see Rest_Lxp_Class_Redemption
+	 * @param  int $school_post_id tl_school post ID.
+	 * @return bool
+	 */
+	private static function is_token_mode_school($school_post_id) {
+		$school_post_id = absint($school_post_id);
+		if (!$school_post_id) {
+			return false;
+		}
+		return (bool) get_post_meta($school_post_id, 'lxp_school_token_mode', true);
+	}
+
+	public static function save_update($request) {
+
 		// ============= Student Post =================================
 		$school_admin_id = $request->get_param('school_admin_id');
 		$student_post_id = intval($request->get_param('student_post_id'));
 		$student_description = trim($request->get_param('lxp_about'));
+
+		// Token mode closes this door: it writes first/last name and a plaintext
+		// password, which is exactly the PII the zero-knowledge design keeps off
+		// the server. Students must come through the class code instead.
+		if (self::is_token_mode_school($request->get_param('student_school_id'))) {
+			return wp_send_json_error(
+				'This school uses privacy-preserving enrollment. Add students by sharing the class code, or create seats from the class roster — names are never stored on the server.',
+				403
+			);
+		}
 
 		// For new students, the Student ID is used as the WP login — ensure it is
 		// valid and unique up front (before any post/user is created).
@@ -829,6 +858,17 @@ class Rest_Lxp_Student
 	public static function import($request)
 	{
 		$school_admin_id = $request->get_param('school_admin_id');
+
+		// Token mode closes this door — see save_update() for the rationale. The
+		// legacy 4-column CSV carries first/last name and a district student_id,
+		// all of which are PII that must not reach the server.
+		if (self::is_token_mode_school($request->get_param('student_school_id'))) {
+			return wp_send_json_error(
+				'This school uses privacy-preserving enrollment. Create seats from the class roster instead — student names are never uploaded.',
+				403
+			);
+		}
+
 		$file = $request->get_file_params();
 		$students_csv = isset($file['students']) ? $file['students'] : null;
 

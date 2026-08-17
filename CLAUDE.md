@@ -6,6 +6,8 @@ Full architecture and copilot guidance: [.github/copilot-instructions.md](.githu
 AI Video feature detail: [docs/ai-video-context.md](docs/ai-video-context.md)  
 Class–Course association detail: [docs/class-course-association-context.md](docs/class-course-association-context.md)  
 Student identity & access (Student ID login, class code, Student Courses/Access widgets): [docs/student-identity-and-access-context.md](docs/student-identity-and-access-context.md)  
+Zero-PII student enrollment (COPPA/FERPA token accounts, code redemption, claim links): [docs/student-privacy-zone-a-context.md](docs/student-privacy-zone-a-context.md)  
+Encrypted roster vault (client-side crypto, passphrase KDF, district escrow, CSV import): [docs/student-privacy-zone-b-context.md](docs/student-privacy-zone-b-context.md)  
 CSV student import detail: [docs/csv-student-import-context.md](docs/csv-student-import-context.md)
 
 ---
@@ -82,6 +84,9 @@ wp rest route list --namespace=lms/v1 --fields=route,methods
 | 9 | `lxp-capstone.js` is a single IIFE — any syntax error silently disables all capstone boxes sitewide. Check browser console after edits. |
 | 10 | AI Video REST callbacks have `current_user_can()` checks **commented out** — auth not enforced at route level. |
 | 11 | AI Video `background_clip` (overlay mode) bypasses Bedrock — injected into the scene JSON in PHP after generation. It makes every `SceneWrap` transparent via `OverlayContext`; new scene components must use `SceneWrap`. Clip is trimmed to the author's M:SS length; Lambda must reach the URL over the public internet (localhost uploads won't render). |
+| 12 | `learnpress_user_items.parent_id` is **0** for token-student enrollment, not the class ID — LP owns that column (child items point at the parent course row). The class link lives in `learnpress_user_itemmeta._lxp_class_id`. Enrollment is written behind LP's back, so LP caches must be flushed after insert or `has_enrolled_course()` stays stale. |
+| 13 | `lms/templates/tinyLxpTheme/lxp/functions.php` is **not** loaded in REST context — REST callbacks must not call its `lxp_*()` helpers without an explicit `require_once`. Use the repositories instead. |
+| 14 | Roster vault (Zone B): a **fresh IV per save** is mandatory — reusing a GCM nonce under one key leaks the keystream. `roster-vault.php` must never gain a decrypt call; it only stores and gates. `kdf_params.algo` is what makes a future Argon2id migration possible — do not drop it. Run `node tests/roster-vault.test.js` after touching the crypto. |
 
 ---
 
