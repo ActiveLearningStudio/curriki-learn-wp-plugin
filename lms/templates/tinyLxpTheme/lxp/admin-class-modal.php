@@ -216,6 +216,31 @@ if (!empty($args['district_post'])) {
                                     </div>
                                 </div>
                             </div>
+                            <!-- Registration Code Section -->
+                            <div class="horizontal-line"></div>
+                            <p class="personal-text">Registration Code</p>
+                            <input type="hidden" name="lxp_class_code_controls" value="1">
+                            <div class="search_box">
+                                <label class="trek-label" for="lxp_class_max_seats">Max Seats <small>(0 = unlimited)</small></label>
+                                <input type="number" min="0" step="1" class="form-control" id="lxp_class_max_seats" name="lxp_class_max_seats" value="0">
+                            </div>
+                            <div class="search_box">
+                                <label class="trek-label" for="lxp_class_code_expires">Code Expires <small>(blank = never)</small></label>
+                                <input type="datetime-local" class="form-control" id="lxp_class_code_expires" name="lxp_class_code_expires">
+                            </div>
+                            <div class="search_box">
+                                <label class="trek-label" for="lxp_class_alias_mode">Student Name Mode</label>
+                                <select class="form-select form-control" id="lxp_class_alias_mode" name="lxp_class_alias_mode">
+                                    <option value="assigned">Assigned seat labels (no typing — recommended)</option>
+                                    <option value="open">Student picks a nickname</option>
+                                </select>
+                                <small class="text-muted">Assigned mode gives students a dropdown of seat labels, so no real name can be entered.</small>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="lxp_class_code_revoked" name="lxp_class_code_revoked">
+                                <label class="form-check-label" for="lxp_class_code_revoked">Revoke this code (blocks new joins)</label>
+                            </div>
+
                             <div class="horizontal-line"></div>
                             <div id="type-radio-options">
                                 <p class="personal-text">Type</p>
@@ -312,6 +337,17 @@ if (!empty($args['district_post'])) {
                 jQuery("#coursesDropdownMenu span").text(jQuery('.select-course-check:checked').length);
             }
 
+            // Registration-code controls
+            jQuery('#lxp_class_max_seats').val(class_record.lxp_class_max_seats || 0);
+            // <input type="datetime-local"> needs YYYY-MM-DDTHH:MM, not a MySQL datetime.
+            jQuery('#lxp_class_code_expires').val(
+                class_record.lxp_class_code_expires
+                    ? String(class_record.lxp_class_code_expires).replace(' ', 'T').slice(0, 16)
+                    : ''
+            );
+            jQuery('#lxp_class_alias_mode').val(class_record.lxp_class_alias_mode || 'assigned');
+            jQuery('#lxp_class_code_revoked').prop('checked', !!class_record.lxp_class_code_revoked);
+
             classModalObj.show();
         }).fail(function (response) {
             console.error("Can not load class");
@@ -351,6 +387,10 @@ if (!empty($args['district_post'])) {
             jQuery('#classModal #grade').val(0);
             jQuery('input[type="checkbox"]').prop('checked', false);
             jQuery('input[type="time"]').val('');
+            // Reset registration-code controls back to their Add-new defaults.
+            jQuery('#lxp_class_max_seats').val(0);
+            jQuery('#lxp_class_code_expires').val('');
+            jQuery('#lxp_class_alias_mode').val('assigned');
             jQuery("#coursesDropdownMenu span").text('--- Select ---');
             jQuery("#edlink_error").html("");
             if (access_token && access_token != '') {

@@ -475,6 +475,7 @@ if (isset($_GET['inactive']) && $_GET['inactive'] === 'true') {
                         jQuery('#inputLastName').val(admin.last_name);
                         jQuery('#inputEmail').val(admin.user_email);
                         jQuery('#inputEmailDefault').val(admin.user_email);
+                        jQuery('#inputEscrowKey').val(district.lxp_district_escrow_pubkey || "");
                         districtModalObj.show();
                     }
                 }).fail(function (response) {

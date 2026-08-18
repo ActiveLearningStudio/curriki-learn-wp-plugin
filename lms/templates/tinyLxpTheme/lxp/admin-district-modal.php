@@ -38,6 +38,21 @@
                                 <input class="brief_info form-control" type="text" id="inputAbout" name="district_about" placeholder="Enter a brief description here" />
                             </div>
                         </div>
+                        <!-- Roster-vault escrow key (Zone B recovery) -->
+                        <div class="input_box brief_input_box">
+                            <div class="label_box brief_label_box">
+                                <label class="label" for="inputEscrowKey">Roster recovery key <small>(optional)</small></label>
+                                <textarea class="brief_info form-control" id="inputEscrowKey" name="lxp_district_escrow_pubkey" rows="4"
+                                          placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"
+                                          style="font-family:monospace;font-size:11px"></textarea>
+                                <small class="text-muted" style="font-size:12px">
+                                    An RSA <strong>public</strong> key. Teachers' browsers use it to store a recovery
+                                    copy of each class roster key. Keep the matching <strong>private</strong> key in your
+                                    own KMS or offline safe — never paste it here. Without this, a teacher who forgets
+                                    their passphrase loses that class's student names permanently.
+                                </small>
+                            </div>
+                        </div>
                     </div>
                     <div class="horizontal_line"></div>
                     <div class="input_section" style="margin-bottom: 25px;">
@@ -155,6 +170,7 @@
             jQuery("#district_post_id").val(0);
             jQuery('#inputDistrictName').val("");
             jQuery('#inputAbout').val("");
+            jQuery('#inputEscrowKey').val("");
             jQuery('#inputFirstName').val("");
             jQuery('#inputLastName').val("");
             jQuery('#inputEmail').val("");

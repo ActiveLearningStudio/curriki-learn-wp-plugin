@@ -449,6 +449,7 @@ $edlink_options = get_option('edlink_options');
                         jQuery('#inputLastName').val(admin.last_name);
                         jQuery('#inputEmail').val(admin.user_email);
                         jQuery('#inputEmailDefault').val(admin.user_email);
+                        jQuery('#inputSchoolTokenMode').prop('checked', !!school.lxp_school_token_mode);
                         schoolModalObj.show();
                     }
                 }).fail(function (response) {

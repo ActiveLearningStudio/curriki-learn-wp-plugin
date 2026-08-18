@@ -337,6 +337,15 @@ class Rest_Lxp_School
 			}
 		}
 
+		// ===== Privacy: zero-PII token mode =================================
+		// When on, the name-collecting student flows (CSV import, Manage
+		// Students) are refused and students join only via the class code.
+		// See Rest_Lxp_Class_Redemption + docs/student-privacy-zone-a-context.md
+		if ( $request->get_param('lxp_school_privacy_controls') ) {
+			$token_mode = filter_var($request->get_param('lxp_school_token_mode'), FILTER_VALIDATE_BOOLEAN);
+			update_post_meta($school_post_id, 'lxp_school_token_mode', $token_mode ? '1' : '');
+		}
+
         return wp_send_json_success("School Saved!");
     }
 
@@ -416,6 +425,8 @@ class Rest_Lxp_School
 		$admin = get_userdata(get_post_meta($school_id, 'lxp_school_admin_id', true));
 		$admin->data->first_name = get_user_meta($admin->ID, 'first_name', true);
 		$admin->data->last_name = get_user_meta($admin->ID, 'last_name', true);
+		// Zero-PII enrollment toggle — gates the name-collecting student flows.
+		$school->lxp_school_token_mode = (bool) get_post_meta($school_id, 'lxp_school_token_mode', true);
 		return wp_send_json_success(array("school" => $school, "admin" => $admin));
 	}
 }

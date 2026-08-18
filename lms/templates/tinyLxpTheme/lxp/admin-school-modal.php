@@ -46,6 +46,23 @@
                                 <input class="brief_info form-control" type="text" id="inputAbout" name="school_about" placeholder="Enter a brief description here" />
                             </div>
                         </div>
+                        <!-- Zero-PII enrollment (COPPA/FERPA) -->
+                        <input type="hidden" name="lxp_school_privacy_controls" value="1">
+                        <div class="input_box brief_input_box">
+                            <div class="label_box brief_label_box">
+                                <label class="label">Student privacy</label>
+                                <div class="form-check" style="padding-top:6px">
+                                    <input class="form-check-input" type="checkbox" value="1" id="inputSchoolTokenMode" name="lxp_school_token_mode">
+                                    <label class="form-check-label" for="inputSchoolTokenMode" style="font-size:13px">
+                                        Privacy-preserving enrollment (no student names stored)
+                                    </label>
+                                </div>
+                                <small class="text-muted" style="font-size:12px">
+                                    Students join with a class code and a seat label. Turning this on
+                                    disables CSV import and manual student creation for this school.
+                                </small>
+                            </div>
+                        </div>
                     </div>
                     <div class="horizontal_line"></div>
                     <div class="input_section" style="margin-bottom: 25px;">
@@ -169,6 +186,7 @@
 
         schoolModal.addEventListener('hide.bs.modal', function (event) {
             jQuery("#school_post_id").val(0);
+            jQuery('#inputSchoolTokenMode').prop('checked', false);
             jQuery('#inputSchoolName').val("");
             jQuery('#inputAbout').val("");
             jQuery('#inputFirstName').val("");

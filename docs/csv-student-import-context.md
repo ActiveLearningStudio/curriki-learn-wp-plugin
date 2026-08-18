@@ -3,6 +3,8 @@
 Session context: CSV student import improvements (completed June 21, 2026)
 Updated June 25, 2026: `student_id` is now the WP username/login (4-column format). See also [student-identity-and-access-context.md](student-identity-and-access-context.md).
 
+> **Disabled for token-mode schools (Aug 2026).** `import()` returns **403** when the target school has `lxp_school_token_mode` set — the 4-column CSV carries first/last name and a district `student_id`, all PII that must not reach the server under the zero-knowledge model. Those schools create seats from the class roster instead, and students self-enroll with a class code. Everything below still applies to every school without the flag. See [student-privacy-zone-a-context.md](student-privacy-zone-a-context.md).
+
 ---
 
 ## Purpose

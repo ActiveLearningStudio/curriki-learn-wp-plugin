@@ -185,6 +185,11 @@
                                         </div>
                                     </th>
                                     <th>
+                                        <div class="th1">
+                                            Seats
+                                        </div>
+                                    </th>
+                                    <th>
                                         <div class="th1 th5">
                                             Groups
                                             <img src="<?php echo $treks_src; ?>/assets/img/showing.svg" alt="logo" />
@@ -196,6 +201,8 @@
                                 <?php
                                     foreach ($classes as $class) {
                                         $lxp_class_code = get_post_meta($class->ID, 'lxp_class_code', true);
+                                        $lxp_seats_max  = (int) get_post_meta($class->ID, 'lxp_class_max_seats', true);
+                                        $lxp_seats_used = lxp_get_class_seats_taken($class->ID);
                                 ?>
                                     <tr>
                                         <td class="user-box">
@@ -231,6 +238,12 @@
                                             <?php else : ?>
                                                 &mdash;
                                             <?php endif; ?>
+                                        </td>
+                                        <td style="white-space:nowrap">
+                                            <span class="lxp-seat-badge" style="background:#e8f0fe;color:#1967d2;padding:2px 8px;border-radius:10px;font-size:12px">
+                                                <?php echo esc_html($lxp_seats_used); ?> / <?php echo $lxp_seats_max > 0 ? esc_html($lxp_seats_max) : '&infin;'; ?>
+                                            </span>
+                                            <button class="lxp-view-roster" data-class-id="<?php echo esc_attr($class->ID); ?>" data-class-name="<?php echo esc_attr($class->post_title); ?>" title="View roster & claim links" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px">&#128203;</button>
                                         </td>
                                         <td>
                                             <?php
@@ -412,6 +425,8 @@
             });
         });
     </script>
+
+    <?php include $livePath.'/lxp/class-roster-modal.php'; ?>
 
     <?php
         $args['students'] = $students;
