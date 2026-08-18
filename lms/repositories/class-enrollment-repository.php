@@ -9,12 +9,23 @@
  * code-redemption flow lands in the course without going through LP's own
  * front-end enroll button.
  *
+ * Writes go through LearnPress' own data layer wherever it is available:
+ * `LearnPress\Models\UserItems\UserCourseModel::save()` (LP 4.2.5+). That is the
+ * same path LP's admin "Assign courses to users" tool uses — see
+ * LP_REST_Admin_Tools_Controller::assign_courses_to_users() — so we inherit LP's
+ * exact cache invalidation, including the course student-count caches that a raw
+ * INSERT leaves stale. A direct $wpdb write remains as a fallback for older LP.
+ *
  * NOTE on parent_id: the privacy spec asked for `parent_id = class post ID`.
  * LP4 already owns that column — for a course row it is 0, and for lesson/quiz
  * rows it holds the parent course's user_item_id. Writing a class post ID there
- * would collide with LP's child-item lookups. The class association is stored
- * in learnpress_user_itemmeta (`_lxp_class_id`) and in lxp_class_members
- * instead; parent_id stays 0.
+ * would collide with LP's child-item lookups. LP's own assign tool likewise
+ * leaves it at 0. The class association is stored in learnpress_user_itemmeta
+ * (`_lxp_class_id`) and in lxp_class_members instead; parent_id stays 0.
+ *
+ * NOTE on ref_type: UserCourseModel defaults it to LP_ORDER_CPT. A redeemed
+ * class seat has no order behind it, so we clear it — again matching LP's
+ * assign tool. Times are stored in UTC (gmdate), which is LP's convention.
  */
 class TL_Enrollment_Repository {
 
@@ -43,6 +54,11 @@ class TL_Enrollment_Repository {
 	 * Idempotent — if the user already has a course row, the existing
 	 * user_item_id is returned and no second row is created.
 	 *
+	 * This deliberately differs from LP's own assign tool, which calls
+	 * delete_user_items_old() first and so wipes progress on every re-assign.
+	 * A returning student resuming a claim link must keep their progress, so we
+	 * no-op instead of recreating.
+	 *
 	 * @param  int $user_id   WordPress user ID (token student).
 	 * @param  int $course_id lp_course post ID.
 	 * @param  int $class_id  tl_class post ID (consent + grouping provenance).
@@ -66,30 +82,134 @@ class TL_Enrollment_Repository {
 			return $existing;
 		}
 
-		$inserted = $this->wpdb->insert(
-			$this->table,
-			array(
-				'user_id'      => $user_id,
-				'item_id'      => $course_id,
-				'item_type'    => 'lp_course',
-				'status'       => 'enrolled',
-				'graduation'   => 'in-progress',
-				'access_level' => 50,
-				'start_time'   => current_time( 'mysql' ),
-				'parent_id'    => 0,
-			),
-			array( '%d', '%d', '%s', '%s', '%s', '%d', '%s', '%d' )
-		);
+		$user_item_id = $this->insert_enrollment( $user_id, $course_id );
 
-		if ( ! $inserted ) {
+		if ( ! $user_item_id ) {
 			return false;
 		}
-
-		$user_item_id = (int) $this->wpdb->insert_id;
 
 		if ( $class_id ) {
 			$this->set_class_meta( $user_item_id, $class_id );
 		}
+
+		return $user_item_id;
+	}
+
+	/**
+	 * Create the course-level enrollment row.
+	 *
+	 * Prefers LP's own model; falls back to a direct write only when that model
+	 * is unavailable (LP older than 4.2.5, or LP not loaded).
+	 *
+	 * @param  int $user_id
+	 * @param  int $course_id
+	 * @return int user_item_id, or 0 on failure.
+	 */
+	private function insert_enrollment( $user_id, $course_id ) {
+		if ( class_exists( '\LearnPress\Models\UserItems\UserCourseModel' ) ) {
+			$user_item_id = $this->insert_via_lp_model( $user_id, $course_id );
+
+			if ( $user_item_id ) {
+				return $user_item_id;
+			}
+
+			// The model path failed. It may still have written a row before
+			// throwing — check before inserting one ourselves, or we duplicate.
+			$stray = $this->get_course_item_id( $user_id, $course_id );
+			if ( $stray ) {
+				return $stray;
+			}
+		}
+
+		return $this->insert_direct( $user_id, $course_id );
+	}
+
+	/**
+	 * Enrol through LearnPress' UserCourseModel (LP 4.2.5+).
+	 *
+	 * save() runs LP's own clean_caches(), which clears the user-item caches
+	 * *and* the per-course student-count caches — the latter being what a raw
+	 * INSERT silently leaves stale.
+	 *
+	 * @param  int $user_id
+	 * @param  int $course_id
+	 * @return int user_item_id, or 0 when the model path could not complete.
+	 */
+	private function insert_via_lp_model( $user_id, $course_id ) {
+		try {
+			$user_course = new \LearnPress\Models\UserItems\UserCourseModel();
+
+			$user_course->user_id    = $user_id;
+			$user_course->item_id    = $course_id;
+			$user_course->item_type  = LP_COURSE_CPT;
+			$user_course->ref_type   = ''; // No order behind a redeemed class seat.
+			$user_course->status     = LP_COURSE_ENROLLED;
+			$user_course->graduation = LP_COURSE_GRADUATION_IN_PROGRESS;
+			$user_course->start_time = gmdate( 'Y-m-d H:i:s', time() );
+
+			$user_course->save();
+
+			$user_item_id = (int) $user_course->get_user_item_id();
+
+			if ( ! $user_item_id ) {
+				return 0;
+			}
+
+			/**
+			 * Same signal LP fires from its admin "Assign courses to users" tool,
+			 * so listeners treat a redeemed seat like any other assigned seat.
+			 *
+			 * Note we deliberately do NOT fire 'learnpress/user/course-enrolled':
+			 * that one is the purchase path, expects an order ID we do not have,
+			 * and triggers enrollment email to what is a sink address for a
+			 * token student.
+			 *
+			 * Caveat: Rest_Lxp_Class_Redemption::provision_member() calls this
+			 * inside a transaction, so listeners run before the commit — as they
+			 * do in LP's own tool. If provisioning then fails, remove() undoes
+			 * the rows but cannot undo a listener's side effects.
+			 */
+			do_action( 'learn-press/assigned-course-to-user', $user_course );
+
+			return $user_item_id;
+		} catch ( \Throwable $e ) {
+			error_log( 'TL_Enrollment_Repository: LP model enrol failed — ' . $e->getMessage() );
+			return 0;
+		}
+	}
+
+	/**
+	 * Fallback: write the enrollment row directly.
+	 *
+	 * Column set and UTC time mirror what LP's model would have written.
+	 * `access_level` is omitted — the column defaults to 50, and LP's own model
+	 * does not write it either.
+	 *
+	 * @param  int $user_id
+	 * @param  int $course_id
+	 * @return int user_item_id, or 0 on failure.
+	 */
+	private function insert_direct( $user_id, $course_id ) {
+		$inserted = $this->wpdb->insert(
+			$this->table,
+			array(
+				'user_id'    => $user_id,
+				'item_id'    => $course_id,
+				'item_type'  => 'lp_course',
+				'status'     => 'enrolled',
+				'graduation' => 'in-progress',
+				'ref_type'   => '',
+				'start_time' => gmdate( 'Y-m-d H:i:s', time() ),
+				'parent_id'  => 0,
+			),
+			array( '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' )
+		);
+
+		if ( ! $inserted ) {
+			return 0;
+		}
+
+		$user_item_id = (int) $this->wpdb->insert_id;
 
 		$this->flush_lp_caches( $user_id );
 
@@ -116,14 +236,34 @@ class TL_Enrollment_Repository {
 	/**
 	 * Remove a user's course row. Used only for rollback of a failed provision.
 	 *
+	 * Prefers LP's model, whose delete() drops the row, its itemmeta and any
+	 * child items, then clears the same caches its save() does.
+	 *
 	 * @param  int $user_id
 	 * @param  int $course_id
 	 * @return bool
 	 */
 	public function remove( $user_id, $course_id ) {
+		$user_id      = absint( $user_id );
+		$course_id    = absint( $course_id );
 		$user_item_id = $this->get_course_item_id( $user_id, $course_id );
+
 		if ( ! $user_item_id ) {
 			return false;
+		}
+
+		if ( class_exists( '\LearnPress\Models\UserItems\UserCourseModel' ) ) {
+			try {
+				$user_course = \LearnPress\Models\UserItems\UserCourseModel::find( $user_id, $course_id, false );
+
+				if ( $user_course instanceof \LearnPress\Models\UserItems\UserCourseModel ) {
+					$user_course->delete();
+					return true;
+				}
+			} catch ( \Throwable $e ) {
+				error_log( 'TL_Enrollment_Repository: LP model delete failed — ' . $e->getMessage() );
+				// Fall through to the direct delete below.
+			}
 		}
 
 		if ( function_exists( 'learn_press_delete_user_item_meta' ) ) {
@@ -259,10 +399,13 @@ class TL_Enrollment_Repository {
 	}
 
 	/**
-	 * Drop LearnPress' cached user/course state so has_enrolled_course() sees
-	 * the row we just inserted behind LP's back.
+	 * Best-effort cache flush for the direct-write fallback only.
 	 *
-	 * Guarded throughout — LP's cache API has moved between 3.x and 4.x.
+	 * On LP 4.2.5+ this is not used for inserts: UserCourseModel::save() runs
+	 * LP's own clean_caches(), which is both precise and more complete than
+	 * anything we can do from outside (it also clears the per-course
+	 * student-count caches). This remains for older LP, where the cache API
+	 * differs — hence every call below is guarded.
 	 *
 	 * @param int $user_id
 	 */

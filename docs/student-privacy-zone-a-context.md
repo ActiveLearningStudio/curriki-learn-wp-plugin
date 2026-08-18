@@ -44,6 +44,21 @@ The spec asked for `learnpress_user_items.parent_id = lxp_class` post ID. LearnP
 
 **Instead:** `parent_id` stays `0`; the class link lives in `learnpress_user_itemmeta` under **`_lxp_class_id`**, plus the `lxp_class_members` row. Query it via `TL_Enrollment_Repository::get_courses_for_class()`.
 
+Confirmed against LearnPress 4.3.3 source: LP's own bulk-enrol tool (`LP_REST_Admin_Tools_Controller::assign_courses_to_users()`) also leaves `parent_id` at `0` on course rows, so this is alignment with LP rather than a workaround.
+
+### 3a-bis. Enrollment goes through LP's model, not a raw INSERT
+
+`TL_Enrollment_Repository::enroll()` builds a `LearnPress\Models\UserItems\UserCourseModel` and calls `save()` — the same path as LP's admin *Assign courses to users* tool. This matters because `UserCourseModel::clean_caches()` clears more than the user-item caches: it also clears `clean_total_students_enrolled()`, `clean_total_students_enrolled_or_purchased()` and the `LP_Courses_Cache::KEYS_COUNT_STUDENT_COURSES` group. A raw INSERT leaves all three stale, so course pages keep showing the old enrolled-student count.
+
+Details worth knowing:
+
+- **`ref_type` is set to `''`.** `UserCourseModel` defaults it to `LP_ORDER_CPT`; a redeemed class seat has no order behind it. LP's own assign tool clears it the same way.
+- **Times are UTC** (`gmdate`), which is LP's convention — not `current_time( 'mysql' )`.
+- **`access_level` is not written.** It is absent from `UserItemsFilter::$all_fields`, so LP's model never writes it either; the column defaults to `50`.
+- **We fire `learn-press/assigned-course-to-user`**, matching LP's assign tool. We deliberately do **not** fire `learnpress/user/course-enrolled` — that is the *purchase* path, its first argument is an order ID we do not have, and it triggers enrollment email to what is a sink address for a token student.
+- **We do not call `delete_user_items_old()` first.** LP's tool deletes and recreates, wiping progress on every re-assign; a student resuming a claim link must keep theirs, so `enroll()` no-ops when a row already exists.
+- **The direct `$wpdb` write survives as a fallback** for LP older than 4.2.5 (before `UserCourseModel` existed), guarded by `class_exists()`. `flush_lp_caches()` now serves only that path.
+
 ### 3b. "No free-text real name" is enforced by removing the text field
 
 No regex can reject "Maria Garcia" while accepting "Student Fourteen". So classes default to **`alias_mode = assigned`**: the student picks an unclaimed label from the teacher's seat pool via a dropdown — there is no free-text input to abuse. `open` mode (student types a nickname) is opt-in per class and backstopped by `Rest_Lxp_Class_Redemption::looks_like_pii()`, which rejects email- and phone-shaped values.
@@ -210,7 +225,7 @@ Claim links can only be printed in the session they were minted, since the serve
 ## 12. Gotchas
 
 1. `parent_id` on `learnpress_user_items` is **0**, not the class ID — see §3a. Use `_lxp_class_id` itemmeta.
-2. Enrollment is written **behind LearnPress's back**, so `TL_Enrollment_Repository::flush_lp_caches()` must run after every insert or `has_enrolled_course()` returns stale `false`.
+2. Enrollment goes through LP's `UserCourseModel::save()`, which invalidates its own caches — see §3a-bis. Do not "simplify" it back to a raw `$wpdb->insert()`: that silently leaves LP's per-course student-count caches stale. `flush_lp_caches()` is the pre-4.2.5 fallback only.
 3. Claim links are unrecoverable by design. "Print claim slips" only prints links minted in the current modal session.
 4. `lxp/functions.php` is **not** loaded in REST context — REST callbacks must use `TL_Class_Member_Repository` directly rather than `lxp_get_class_seats_taken()`.
 5. Seat labels auto-grow only for unlimited-seat classes. A capped class that runs out returns `class_full`; raise `lxp_class_max_seats` (which re-syncs the pool) rather than editing labels.
