@@ -88,6 +88,7 @@ wp rest route list --namespace=lms/v1 --fields=route,methods
 | 13 | `lms/templates/tinyLxpTheme/lxp/functions.php` is **not** loaded in REST context — REST callbacks must not call its `lxp_*()` helpers without an explicit `require_once`. Use the repositories instead. |
 | 14 | Class membership is stored **twice on purpose**: `lxp_student_ids` post meta (what every dashboard reads) and `lxp_class_members` (seats, aliases, claim secrets). Any code that rewrites the meta wholesale must call `Rest_Lxp_Class_Redemption::reconcile_class_student_meta($class_id)` afterwards or token students are silently evicted. |
 | 15 | Roster vault (Zone B): a **fresh IV per save** is mandatory — reusing a GCM nonce under one key leaks the keystream. `roster-vault.php` must never gain a decrypt call; it only stores and gates. `kdf_params.algo` is what makes a future Argon2id migration possible — do not drop it. Run `node tests/roster-vault.test.js` after touching the crypto. |
+| 16 | Any REST call that relies on `is_user_logged_in()` / `current_user_can()` **inside** the callback (the pattern this codebase uses instead of a real `permission_callback`) must send an `X-WP-Nonce: wp_create_nonce('wp_rest')` header from cookie-authenticated JS. Without it, WP core's `rest_cookie_check_errors()` silently force-logs the request out (`wp_set_current_user(0)`) rather than erroring — the callback then rejects with a generic "not allowed" message that looks like an ownership bug. See `class-roster-modal.php`'s `restNonce` / `RosterVault`'s `opts.nonce` for the pattern. |
 
 ---
 

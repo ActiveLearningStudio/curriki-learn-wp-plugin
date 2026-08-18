@@ -135,10 +135,15 @@
 	 * @param {object} opts
 	 * @param {string} opts.apiUrl   REST base, e.g. https://host/wp-json/lms/v1/
 	 * @param {number} opts.classId
+	 * @param {string} opts.nonce    wp_create_nonce('wp_rest') — required. Without
+	 *   it, WP's cookie-auth check silently demotes the request to anonymous
+	 *   (see rest_cookie_check_errors in wp-includes/rest-api.php) rather than
+	 *   erroring, so a missing nonce looks like a permissions failure downstream.
 	 */
 	function RosterVault(opts) {
 		this.apiUrl   = opts.apiUrl;
 		this.classId  = opts.classId;
+		this.nonce    = opts.nonce || '';
 
 		this.dek       = null;   // CryptoKey, only while unlocked
 		this.names     = {};     // member_id -> real name
@@ -167,7 +172,8 @@
 		return window.fetch(this.apiUrl + path, {
 			method: 'POST',
 			body: body,
-			credentials: 'same-origin'
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': this.nonce }
 		}).then(function (res) {
 			return res.json().then(function (json) {
 				return { ok: res.ok, status: res.status, json: json };
