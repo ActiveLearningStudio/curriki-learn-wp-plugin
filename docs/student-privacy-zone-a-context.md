@@ -89,7 +89,26 @@ UNIQUE (class_id, alias_label), UNIQUE (claim_token_hash)
 
 > `student_id` is now an **opaque internal handle**, not a district SIS number. A real SIS ID is a stable external identifier — anyone with SIS access could re-identify every row — so it is never collected. The meta key is kept because every dashboard, grade and class query resolves students through it.
 
-The student post ID is appended to the class's `lxp_student_ids`, so the existing Student Courses widget and teacher dashboards pick token students up with no changes.
+### Class ↔ student association: two records, on purpose
+
+A class's membership is recorded **twice**, and both are needed:
+
+| | `lxp_student_ids` (post meta) | `lxp_class_members` (table) |
+|---|---|---|
+| Holds | `tl_student` post IDs | post ID + user ID + alias + claim hash + consent trail |
+| Read by | every existing dashboard, widget, grade and assignment query | seats, roster modal, vault |
+| Written by | the class modal save | code redemption / seat provisioning |
+| Authoritative for | student *visibility* | **seat count** |
+
+The direction of assignment is inverted between the two flows. The old one is **teacher-push** — the student must exist first, then the teacher ticks them in the class modal. Redemption is **student-pull** — nobody pre-creates anything. Same storage, opposite flow.
+
+`provision_member()` writes both, so token students are visible to surfaces that have never heard of the members table.
+
+> **The clobber, and how it's closed.** `Rest_Lxp_Class::create()` rebuilds `lxp_student_ids` wholesale from the modal's checkbox list — `delete_post_meta()` then re-add. A token student missing from that list would be silently evicted from the meta while the table still called them active: seat still consumed, roster still showing them, but gone from the Student Courses widget with no error anywhere.
+>
+> `Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` now runs at the end of every class save. It re-adds any active member the rebuild missed and drops any the table marks removed. **Students with no row in the members table are left completely untouched** — it only ever speaks for token members.
+>
+> `TL_Class_Member_Repository::set_removed()` does *not* touch the meta. Any future "remove student" flow must call the reconciler afterwards, or the student lingers in every dashboard.
 
 ---
 
@@ -197,4 +216,5 @@ Claim links can only be printed in the session they were minted, since the serve
 5. Seat labels auto-grow only for unlimited-seat classes. A capped class that runs out returns `class_full`; raise `lxp_class_max_seats` (which re-syncs the pool) rather than editing labels.
 6. `alias_mode = open` still allows a determined student to type something name-like. Only `assigned` is structurally safe — keep it as the default.
 7. **Seat-count race:** two students submitting simultaneously against the last seat can over-fill a class by one. The `UNIQUE (class_id, alias_label)` index closes the *alias* race hard, so nobody ever shares a seat label; only the count can drift, and only by one. Accepted rather than serialised behind a lock — over-enrolling one student is far less damaging than blocking a whole class on a lock timeout.
-8. Rate limiting uses two separate counters: `write` (redeem/claim, 10 per 10 min) and `lookup` (seat reads, 60 per 10 min). The join form calls the lookup as the student types, so it must never consume the write budget — and the widget also dedupes repeat lookups of the same code.
+8. Class membership lives in **two** places (`lxp_student_ids` meta + `lxp_class_members`) and that is deliberate, not redundancy — see §4. Any code that rewrites `lxp_student_ids` wholesale must call `Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` afterwards.
+9. Rate limiting uses two separate counters: `write` (redeem/claim, 10 per 10 min) and `lookup` (seat reads, 60 per 10 min). The join form calls the lookup as the student types, so it must never consume the write budget — and the widget also dedupes repeat lookups of the same code.

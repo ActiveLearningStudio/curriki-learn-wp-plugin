@@ -247,6 +247,15 @@ class Rest_Lxp_Class
 			add_post_meta($class_post_id, 'lxp_student_ids', $student_id);
 		}
 
+		// The rebuild above wipes the list and repopulates it from the modal's
+		// checkboxes. Token students who joined by code may not be in that list,
+		// so re-add anyone lxp_class_members still counts as an active member —
+		// otherwise saving a class silently evicts them. Non-token students are
+		// untouched. See Rest_Lxp_Class_Redemption::reconcile_class_student_meta().
+		if (class_exists('Rest_Lxp_Class_Redemption')) {
+			Rest_Lxp_Class_Redemption::reconcile_class_student_meta($class_post_id);
+		}
+
 		delete_post_meta($class_post_id, 'lxp_class_course_ids');
 		$course_ids = $request->get_param('course_ids');
 		if (is_array($course_ids)) {

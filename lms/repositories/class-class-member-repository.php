@@ -124,6 +124,11 @@ class TL_Class_Member_Repository {
 	/**
 	 * Mark a member removed, freeing their alias-seat for reuse.
 	 *
+	 * Callers MUST follow this with
+	 * `Rest_Lxp_Class_Redemption::reconcile_class_student_meta( $class_id )`,
+	 * or the student stays listed in the class's legacy `lxp_student_ids` meta
+	 * and keeps showing up in every dashboard that reads it.
+	 *
 	 * @param  int $id
 	 * @return bool
 	 */

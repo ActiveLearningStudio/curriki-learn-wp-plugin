@@ -600,6 +600,63 @@ class Rest_Lxp_Class_Redemption {
 	}
 
 	// =========================================================================
+	// Membership reconciliation
+	// =========================================================================
+
+	/**
+	 * Keep the legacy `lxp_student_ids` meta in step with `lxp_class_members`.
+	 *
+	 * Two records describe the same association on purpose: the repeating post
+	 * meta that every existing dashboard, widget and grade query reads, and the
+	 * members table that owns seats, aliases, consent provenance and claim
+	 * secrets. Provisioning writes both together.
+	 *
+	 * The gap this closes: `Rest_Lxp_Class::create()` rebuilds the meta wholesale
+	 * from the class modal's checkbox list. A token student missing from that
+	 * list — different school scoping, an admin editing with a filtered student
+	 * list — would be silently dropped from the meta while the table still called
+	 * them active. The seat stays consumed and the roster still shows them, but
+	 * they vanish from the Student Courses widget and lose their way back in.
+	 * Nothing errors, so it would surface weeks later as a confused teacher.
+	 *
+	 * Students with no row in the table at all (legacy, teacher-assigned) are
+	 * left completely untouched — this only ever speaks for token members.
+	 *
+	 * @param  int $class_id tl_class post ID.
+	 * @return int Number of meta rows added or removed.
+	 */
+	public static function reconcile_class_student_meta( $class_id ) {
+		$class_id = absint( $class_id );
+		if ( ! $class_id ) {
+			return 0;
+		}
+
+		$current = array_map( 'intval', (array) get_post_meta( $class_id, 'lxp_student_ids' ) );
+		$changed = 0;
+
+		// Every active member must appear in the meta.
+		foreach ( self::members()->get_by_class( $class_id, 'active' ) as $member ) {
+			$post_id = (int) $member->student_post_id;
+			if ( $post_id && ! in_array( $post_id, $current, true ) ) {
+				add_post_meta( $class_id, 'lxp_student_ids', $post_id );
+				$current[] = $post_id;
+				$changed++;
+			}
+		}
+
+		// Anyone the table marks removed must not.
+		foreach ( self::members()->get_by_class( $class_id, 'removed' ) as $member ) {
+			$post_id = (int) $member->student_post_id;
+			if ( $post_id && in_array( $post_id, $current, true ) ) {
+				delete_post_meta( $class_id, 'lxp_student_ids', $post_id );
+				$changed++;
+			}
+		}
+
+		return $changed;
+	}
+
+	// =========================================================================
 	// Validation helpers
 	// =========================================================================
 
