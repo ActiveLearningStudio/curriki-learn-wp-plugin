@@ -104,6 +104,14 @@
     // server keeps hashes. Hold this session's in memory for printing.
     var claimLinks = {};
 
+    // WP's REST cookie-auth check (rest_cookie_check_errors in wp-includes/rest-api.php)
+    // demotes any cookie-authenticated request with no X-WP-Nonce header to
+    // anonymous (wp_set_current_user(0)) — it does not error out, it just silently
+    // logs the request out. can_manage_class() then sees is_user_logged_in()===false
+    // and rejects with "not allowed", which looks like a permissions bug but is a
+    // missing-header bug. Every teacher-only call in this modal must send this.
+    var restNonce = '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>';
+
     function apiUrl() {
         var host = window.location.hostname === 'localhost'
             ? window.location.origin + '<?php echo WORDPRESS_HOST; ?>'
@@ -133,7 +141,8 @@
         var body = new FormData();
         Object.keys(data).forEach(function (k) { body.append(k, data[k]); });
         return jQuery.ajax({ method: 'POST', url: apiUrl() + path, data: body,
-                             processData: false, contentType: false });
+                             processData: false, contentType: false,
+                             headers: { 'X-WP-Nonce': restNonce } });
     }
 
     // -----------------------------------------------------------------
@@ -233,7 +242,7 @@
     }
 
     function loadVault() {
-        vault = new window.LXPRosterVault({ apiUrl: apiUrl(), classId: classId });
+        vault = new window.LXPRosterVault({ apiUrl: apiUrl(), classId: classId, nonce: restNonce });
         return vault.load().then(function () {
             if (vault.exists && !vault.hasEscrow && vault.escrowPem) {
                 showNotice('This roster has no district recovery copy yet. It will be added the next time you save names.');
