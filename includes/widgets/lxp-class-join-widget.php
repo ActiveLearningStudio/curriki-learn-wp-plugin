@@ -65,6 +65,42 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 
 		$this->end_controls_section();
 
+		// ── Ticket screen ─────────────────────────────────────────────────
+		// Shown once, straight after a successful join. The claim link exists
+		// in plaintext only at this moment — the server stores nothing but its
+		// hash — so this screen is the student's single chance to keep it.
+		$this->start_controls_section( 'section_ticket', [
+			'label' => esc_html__( 'Ticket Screen', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_CONTENT,
+		] );
+
+		$this->add_control( 'ticket_heading', [
+			'label'   => esc_html__( 'Heading', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'You are in!', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'ticket_note', [
+			'label'       => esc_html__( 'Instruction', 'tinylxp' ),
+			'type'        => Controls_Manager::TEXTAREA,
+			'default'     => esc_html__( 'This is your ticket back into class! Ask your teacher to help you save or bookmark this page.', 'tinylxp' ),
+			'description' => esc_html__( 'Shown above the class link. This is the only time the link is ever shown.', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'ticket_copy_label', [
+			'label'   => esc_html__( 'Copy Button Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Copy my link', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'ticket_continue_label', [
+			'label'   => esc_html__( 'Continue Button Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Go to my class', 'tinylxp' ),
+		] );
+
+		$this->end_controls_section();
+
 		// ── Style ─────────────────────────────────────────────────────────
 		$this->start_controls_section( 'section_style', [
 			'label' => esc_html__( 'Style', 'tinylxp' ),
@@ -107,6 +143,11 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 		$alias_label   = esc_html( $settings['alias_label'] );
 		$button_label  = esc_html( $settings['button_label'] );
 		$privacy_note  = esc_html( $settings['privacy_note'] );
+
+		$ticket_heading  = esc_html( $settings['ticket_heading'] );
+		$ticket_note     = esc_html( $settings['ticket_note'] );
+		$ticket_copy     = esc_html( $settings['ticket_copy_label'] );
+		$ticket_continue = esc_html( $settings['ticket_continue_label'] );
 
 		$box_bg    = esc_attr( $settings['box_bg_color'] );
 		$text_col  = esc_attr( $settings['text_color'] );
@@ -190,42 +231,129 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 			text-align: center;
 		}
 		#<?php echo esc_attr( $uid ); ?> .lxp-cj-seat-wrap { display: none; }
+
+		/* ── Ticket screen ─────────────────────────────────────────────── */
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-ticket { text-align: center; }
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-ticket-heading {
+			font-size: 20px;
+			font-weight: 500;
+			margin: 0 0 8px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-seat-badge {
+			display: inline-block;
+			background: #e8f0fe;
+			color: #1967d2;
+			border-radius: 12px;
+			padding: 4px 14px;
+			font-size: 14px;
+			font-weight: 500;
+			margin-bottom: 16px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-ticket-note {
+			font-size: 15px;
+			line-height: 1.5;
+			margin-bottom: 16px;
+			text-align: left;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-ticket-link {
+			display: block;
+			word-break: break-all;
+			font-family: 'Roboto Mono', Consolas, monospace;
+			font-size: 12px;
+			line-height: 1.5;
+			background: #f1f3f4;
+			border: 1px solid #dadce0;
+			border-radius: 6px;
+			padding: 10px 12px;
+			margin-bottom: 12px;
+			color: #1a73e8;
+			text-align: left;
+			text-decoration: none;
+		}
+		#<?php echo esc_attr( $uid ); ?> button.lxp-cj-copy {
+			background: #fff;
+			color: <?php echo $btn_bg; ?>;
+			border: 1px solid #dadce0;
+			margin-bottom: 10px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-copied {
+			font-size: 12px;
+			color: #137333;
+			min-height: 16px;
+			margin-bottom: 6px;
+		}
 		</style>
 
-		<form class="lxp-cj" id="<?php echo esc_attr( $uid ); ?>" autocomplete="off">
-			<?php if ( $heading ) : ?>
-			<div class="lxp-cj-heading"><?php echo $heading; ?></div>
-			<?php endif; ?>
+		<div class="lxp-cj" id="<?php echo esc_attr( $uid ); ?>">
 
-			<label for="<?php echo esc_attr( $uid ); ?>-code"><?php echo $code_label; ?></label>
-			<input type="text" id="<?php echo esc_attr( $uid ); ?>-code" class="lxp-cj-code"
-			       maxlength="6" required autocapitalize="characters" spellcheck="false" />
+			<form class="lxp-cj-form" autocomplete="off">
+				<?php if ( $heading ) : ?>
+				<div class="lxp-cj-heading"><?php echo $heading; ?></div>
+				<?php endif; ?>
 
-			<div class="lxp-cj-seat-wrap">
-				<label for="<?php echo esc_attr( $uid ); ?>-seat"><?php echo $alias_label; ?></label>
-				<select id="<?php echo esc_attr( $uid ); ?>-seat" class="lxp-cj-seat"></select>
-				<input type="text" class="lxp-cj-alias" style="display:none" maxlength="32"
-				       placeholder="<?php echo esc_attr__( 'Choose a nickname', 'tinylxp' ); ?>" />
+				<label for="<?php echo esc_attr( $uid ); ?>-code"><?php echo $code_label; ?></label>
+				<input type="text" id="<?php echo esc_attr( $uid ); ?>-code" class="lxp-cj-code"
+				       maxlength="6" required autocapitalize="characters" spellcheck="false" />
+
+				<div class="lxp-cj-seat-wrap">
+					<label for="<?php echo esc_attr( $uid ); ?>-seat"><?php echo $alias_label; ?></label>
+					<select id="<?php echo esc_attr( $uid ); ?>-seat" class="lxp-cj-seat"></select>
+					<input type="text" class="lxp-cj-alias" style="display:none" maxlength="32"
+					       placeholder="<?php echo esc_attr__( 'Choose a nickname', 'tinylxp' ); ?>" />
+				</div>
+
+				<button type="submit" class="lxp-cj-btn"><?php echo $button_label; ?></button>
+				<div class="lxp-cj-msg" aria-live="polite"></div>
+				<?php if ( $privacy_note ) : ?>
+				<div class="lxp-cj-note"><?php echo $privacy_note; ?></div>
+				<?php endif; ?>
+			</form>
+
+			<!--
+				Shown once, after a successful join. The raw claim link exists only
+				here: the server keeps a SHA-256 hash of it and nothing else, so it
+				can never be re-shown. If the student loses it, the teacher must
+				re-issue from the Roster modal, which rotates the secret.
+			-->
+			<div class="lxp-cj-ticket" hidden>
+				<?php if ( $ticket_heading ) : ?>
+				<div class="lxp-cj-ticket-heading"><?php echo $ticket_heading; ?></div>
+				<?php endif; ?>
+
+				<div class="lxp-cj-seat-badge"></div>
+
+				<?php if ( $ticket_note ) : ?>
+				<div class="lxp-cj-ticket-note"><?php echo $ticket_note; ?></div>
+				<?php endif; ?>
+
+				<a class="lxp-cj-ticket-link" href="#" rel="nofollow"></a>
+
+				<button type="button" class="lxp-cj-copy"><?php echo $ticket_copy; ?></button>
+				<div class="lxp-cj-copied" aria-live="polite"></div>
+				<button type="button" class="lxp-cj-continue"><?php echo $ticket_continue; ?></button>
 			</div>
 
-			<button type="submit" class="lxp-cj-btn"><?php echo $button_label; ?></button>
-			<div class="lxp-cj-msg" aria-live="polite"></div>
-			<?php if ( $privacy_note ) : ?>
-			<div class="lxp-cj-note"><?php echo $privacy_note; ?></div>
-			<?php endif; ?>
-		</form>
+		</div>
 
 		<script>
 		(function() {
-			var form = document.getElementById(<?php echo wp_json_encode( $uid ); ?>);
-			if (!form) return;
+			var root = document.getElementById(<?php echo wp_json_encode( $uid ); ?>);
+			if (!root) return;
 
-			var codeInput = form.querySelector('.lxp-cj-code');
-			var seatWrap  = form.querySelector('.lxp-cj-seat-wrap');
-			var seatSel   = form.querySelector('.lxp-cj-seat');
-			var aliasIn   = form.querySelector('.lxp-cj-alias');
-			var btn       = form.querySelector('.lxp-cj-btn');
-			var msg       = form.querySelector('.lxp-cj-msg');
+			var form      = root.querySelector('.lxp-cj-form');
+			var codeInput = root.querySelector('.lxp-cj-code');
+			var seatWrap  = root.querySelector('.lxp-cj-seat-wrap');
+			var seatSel   = root.querySelector('.lxp-cj-seat');
+			var aliasIn   = root.querySelector('.lxp-cj-alias');
+			var btn       = root.querySelector('.lxp-cj-btn');
+			var msg       = root.querySelector('.lxp-cj-msg');
+
+			var ticket      = root.querySelector('.lxp-cj-ticket');
+			var ticketBadge = root.querySelector('.lxp-cj-seat-badge');
+			var ticketLink  = root.querySelector('.lxp-cj-ticket-link');
+			var copyBtn     = root.querySelector('.lxp-cj-copy');
+			var copiedMsg   = root.querySelector('.lxp-cj-copied');
+			var continueBtn = root.querySelector('.lxp-cj-continue');
 
 			var redeemUrl = <?php echo wp_json_encode( $redeem_url ); ?>;
 			var claimUrl  = <?php echo wp_json_encode( $claim_url ); ?>;
@@ -360,18 +488,71 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 
 				post(redeemUrl, { class_code: code, alias_label: alias }).then(function(r) {
 					if (r.ok && r.json && r.json.success) {
-						// The claim link is shown once — stash it so the student
-						// can return to this account on their next visit.
+						// Belt and braces: stash it too, so a student who clicks
+						// straight past the ticket screen can still be recovered
+						// on this device.
 						try {
 							window.localStorage.setItem('lxp_claim_' + code, r.json.data.claim_url);
 						} catch (err) { /* private mode — non-fatal */ }
-						window.location.href = r.json.data.redirect_url;
+						showTicket(r.json.data);
 					} else {
 						fail(errorText(r));
 					}
 				}).catch(function() {
 					fail();
 				});
+			});
+
+			// --- Ticket screen. ----------------------------------------------
+			// The raw claim link is only ever available right here. Swap the form
+			// out for it rather than redirecting straight past it.
+			function showTicket(data) {
+				form.hidden   = true;
+				ticket.hidden = false;
+
+				ticketBadge.textContent = data.alias_label || '';
+				ticketLink.textContent  = data.claim_url;
+				ticketLink.href         = data.claim_url;
+
+				// Navigate to the claim URL itself, not redirect_url. That URL *is*
+				// the Student Courses page (plus ?claim & ?class_code), so the
+				// address bar then holds the exact link worth bookmarking — there
+				// is no browser API to add a bookmark for us, only the user's own
+				// Ctrl+D on the page they are standing on.
+				continueBtn.onclick = function() {
+					window.location.href = data.claim_url;
+				};
+
+				root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+
+			copyBtn.addEventListener('click', function() {
+				var url = ticketLink.href;
+
+				function done() {
+					copiedMsg.textContent = 'Link copied. Save it somewhere safe!';
+				}
+
+				// navigator.clipboard is unavailable on plain http, which schools
+				// and local dev both hit — fall back to a throwaway textarea.
+				if (window.navigator.clipboard && window.navigator.clipboard.writeText) {
+					window.navigator.clipboard.writeText(url).then(done).catch(legacyCopy);
+				} else {
+					legacyCopy();
+				}
+
+				function legacyCopy() {
+					var ta = document.createElement('textarea');
+					ta.value = url;
+					ta.setAttribute('readonly', '');
+					ta.style.position = 'absolute';
+					ta.style.left = '-9999px';
+					document.body.appendChild(ta);
+					ta.select();
+					try { document.execCommand('copy'); done(); }
+					catch (err) { copiedMsg.textContent = 'Press and hold the link to copy it.'; }
+					document.body.removeChild(ta);
+				}
 			});
 		})();
 		</script>
