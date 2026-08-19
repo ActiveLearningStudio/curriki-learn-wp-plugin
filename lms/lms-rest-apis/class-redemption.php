@@ -183,7 +183,7 @@ class Rest_Lxp_Class_Redemption {
 		return wp_send_json_success( array(
 			'alias_label' => $provisioned['alias_label'],
 			'claim_url'   => $provisioned['claim_url'],
-			'redirect_url' => self::first_course_url( $class_id ),
+			'redirect_url' => self::landing_url( $class_id ),
 		) );
 	}
 
@@ -222,7 +222,7 @@ class Rest_Lxp_Class_Redemption {
 
 		return wp_send_json_success( array(
 			'alias_label'  => $member->alias_label,
-			'redirect_url' => self::first_course_url( (int) $member->class_id ),
+			'redirect_url' => self::landing_url( (int) $member->class_id ),
 		) );
 	}
 
@@ -449,7 +449,7 @@ class Rest_Lxp_Class_Redemption {
 
 		return wp_send_json_success( array(
 			'alias_label' => $member->alias_label,
-			'claim_url'   => self::build_claim_url( $raw ),
+			'claim_url'   => self::build_claim_url( $raw, (int) $member->class_id ),
 		) );
 	}
 
@@ -595,7 +595,7 @@ class Rest_Lxp_Class_Redemption {
 			'student_post_id' => (int) $student_post_id,
 			'member_id'       => (int) $member_id,
 			'alias_label'     => $alias_label,
-			'claim_url'       => self::build_claim_url( $raw_claim ),
+			'claim_url'       => self::build_claim_url( $raw_claim, $class_id ),
 		);
 	}
 
@@ -1038,10 +1038,16 @@ class Rest_Lxp_Class_Redemption {
 	/**
 	 * Build the student-facing claim URL.
 	 *
+	 * Carries `class_code` alongside `claim` so the Student Courses widget can
+	 * open straight on this student's class instead of its class-picker step
+	 * (see its `getParam()` / `showStep2()` deep-link handling). A token student
+	 * is normally in exactly one class, so the picker is pure friction.
+	 *
 	 * @param  string $raw_token
+	 * @param  int    $class_id
 	 * @return string
 	 */
-	private static function build_claim_url( $raw_token ) {
+	private static function build_claim_url( $raw_token, $class_id = 0 ) {
 		/**
 		 * Filter the page a claim link points at.
 		 *
@@ -1049,28 +1055,44 @@ class Rest_Lxp_Class_Redemption {
 		 */
 		$base = apply_filters( 'tl_lxp_claim_base_url', home_url( '/student-courses/' ) );
 
-		return add_query_arg( 'claim', $raw_token, $base );
+		$args = array( 'claim' => $raw_token );
+
+		$code = $class_id ? get_post_meta( absint( $class_id ), 'lxp_class_code', true ) : '';
+		if ( $code ) {
+			$args['class_code'] = $code;
+		}
+
+		return add_query_arg( $args, $base );
 	}
 
 	/**
 	 * Where to send a student once their session starts.
 	 *
+	 * The Student Courses landing page, not straight into a course — a fresh
+	 * token student has no context yet for a single course; landing on the page
+	 * that lists everything they're enrolled in is the same pattern the Student
+	 * Courses widget already uses for regular students. `class_code` deep-links
+	 * past that widget's class picker.
+	 *
 	 * @param  int $class_id
 	 * @return string
 	 */
-	private static function first_course_url( $class_id ) {
-		$course_ids = array_filter( array_map( 'absint', (array) get_post_meta( $class_id, 'lxp_class_course_ids' ) ) );
+	private static function landing_url( $class_id ) {
+		$base = home_url( '/student-courses/' );
 
-		if ( ! empty( $course_ids ) ) {
-			$url = get_permalink( reset( $course_ids ) );
-			if ( $url ) {
-				return $url;
-			}
+		$code = get_post_meta( absint( $class_id ), 'lxp_class_code', true );
+		if ( $code ) {
+			$base = add_query_arg( 'class_code', $code, $base );
 		}
 
-		$code = get_post_meta( $class_id, 'lxp_class_code', true );
-
-		return add_query_arg( 'class_code', $code, home_url( '/student-courses/' ) );
+		/**
+		 * Filter the page a student lands on after redeeming a code or
+		 * resuming a claim link. Mirrors 'tl_lxp_claim_base_url'.
+		 *
+		 * @param string $url      Default: /student-courses/?class_code=…
+		 * @param int    $class_id
+		 */
+		return apply_filters( 'tl_lxp_redirect_after_join_url', $base, $class_id );
 	}
 
 	/**

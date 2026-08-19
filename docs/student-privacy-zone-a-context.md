@@ -162,7 +162,33 @@ The client always receives the **same generic message**; the reason is returned 
 
 Each token account gets a per-student **claim link** (`?claim=<48 hex>`), shown once at provisioning. Only its SHA-256 is stored (`claim_token_hash`), so the server cannot reproduce a lost link — the teacher re-issues via `/class/member/reissue`, which rotates the secret and invalidates the old link.
 
-The class code alone is **not** sufficient to log back in: classmates share it. Redeeming again would consume a second seat, which is why the join widget stashes the claim URL in `localStorage` keyed by class code.
+The class code alone is **not** sufficient to log back in: classmates share it. Redeeming again would consume a second seat, and in `open` alias mode would mint an unlimited number of duplicate accounts, since nothing ties a browser to a seat it already holds.
+
+### Claim URL shape
+
+```
+/student-courses/?claim=<48 hex>&class_code=<6 chars>
+```
+
+`class_code` is not decoration: the Student Courses widget is a two-step UI (class picker → that class's courses) and reads `?class_code=` on load to open straight on step 2. A token student is normally in exactly one class, so the picker is pure friction. Both `build_claim_url()` and `landing_url()` append it.
+
+### The ticket screen, and the bookmark hand-off
+
+Because the raw link exists for exactly one moment — the response to `redeem()` — the join widget does **not** redirect straight through it. On success it swaps the form for a *ticket screen* showing the seat label, the link as selectable text (also a real `<a href>`, so browser "Bookmark link" works), a copy button, and a K12-facing instruction to save it.
+
+**Continue then navigates to the claim URL itself, not to `redirect_url`.** That is deliberate and worth not "tidying up": no browser exposes an API to add a bookmark — `window.external.AddFavorite` (IE) and `window.sidebar.addPanel` (Firefox, removed in 23) are both long dead, and a synthesised Ctrl+D `KeyboardEvent` is untrusted so browser chrome ignores it. The only thing that works is the user's own Ctrl+D on the page they are standing on — which means the student has to be *standing on* the claim URL. Sending them to a clean `/student-courses/` would put the wrong URL in the address bar and make any bookmark prompt actively misleading.
+
+On arrival, a **separate** widget — `LXP_Bookmark_Prompt_Widget` ([lxp-bookmark-prompt-widget.php](../includes/widgets/lxp-bookmark-prompt-widget.php), Elementor name `lxp-bookmark-prompt`) — shows the banner: Ctrl+D, swapped to ⌘D on Apple platforms, with an **"I've bookmarked it"** button. That button is a confirmation, not a dismissal — clicking it `history.replaceState()`s the `claim` param out of the URL while **keeping `class_code`**, so the secret leaves both the address bar and that history entry, and the courses widget stays on the student's class. Bookmark first, confirm second; the wording has to keep carrying that order, which is why the widget ships an editor warning against turning it into a close button.
+
+It is a standalone widget rather than part of the join widget so placement and login-state visibility stay with the page author, via Elementor's own display conditions. The one thing it *does* gate on internally is `$_GET['claim']` — that is functional, not a visibility rule: with no token in the URL there is nothing to bookmark and nothing to strip. It renders regardless inside the Elementor editor, so it can be selected and styled.
+
+In practice the banner appears once, right after a join. A *returning* student is signed out, so they take the normal claim path instead: token posted, account resumed, JS redirects to a clean `landing_url()` with no `claim` param left to trigger it.
+
+An earlier build stashed the link in `localStorage` and redirected immediately, which meant a student was never shown the one credential they need to come back — clearing site data or moving to another device stranded them with no self-service recovery. The `localStorage` stash is retained as a same-device fallback, but the visible screen is the actual mechanism.
+
+Its text is Elementor-editable under the widget's **Ticket Screen** section, so schools can reword it for their reading level without touching code.
+
+> A self-service "show me a new link" button for an already-logged-in student is deliberately **not** built. It could only ever rotate the secret (the old one being unrecoverable), so it would silently invalidate any link the student had already saved elsewhere. Recovery stays with the teacher, who can see the whole roster before rotating.
 
 ---
 
@@ -183,6 +209,7 @@ Toggle: **Admin → Schools → edit → Student privacy** checkbox (`admin-scho
 | Surface | File |
 |---|---|
 | Join form (student) | [lxp-class-join-widget.php](../includes/widgets/lxp-class-join-widget.php) — Elementor `lxp-class-join` |
+| Bookmark prompt (student) | [lxp-bookmark-prompt-widget.php](../includes/widgets/lxp-bookmark-prompt-widget.php) — Elementor `lxp-bookmark-prompt` |
 | Roster + claim links (teacher) | [class-roster-modal.php](../lms/templates/tinyLxpTheme/lxp/class-roster-modal.php) |
 | Code controls | `teacher-class-modal.php`, `admin-class-modal.php` |
 | Seats badge + Roster button | `teacher-classes.php`, `admin-classes.php` |
