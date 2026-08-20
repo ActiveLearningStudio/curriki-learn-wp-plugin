@@ -69,7 +69,7 @@ At the client's request, `assigned` was removed. Every class is now nickname-typ
 
 So the enforcement today is two weaker things:
 
-1. **Framing.** The field is labelled and placeholdered "Choose a nickname", and the Elementor control carries a note telling authors not to reword it into "Your name". This is a nudge, not a control.
+1. **Framing.** The field is labelled and placeholdered "Choose a Name", and the Elementor control carries a note telling authors not to reword it into "Your name". This is a nudge, not a control.
 2. **`Rest_Lxp_Class_Redemption::looks_like_pii()`** — rejects email-shaped values (`@`) and phone-shaped ones (≥7 digits after stripping separators), plus the `ALIAS_PATTERN` charset/length limit. Mirrored client-side in the join widget for fast feedback; the server remains the authority.
 
 **No regex can reject "Maria Garcia" while accepting "Student Fourteen."** A student who types their real first name will have it stored as their `display_name` and `tl_student` post title. That is a known, accepted consequence of the product decision — not an oversight — but it means the "server never holds student PII" claim is now a matter of student behaviour, not of system design. Anyone reasoning about the COPPA/FERPA posture needs to know that.
