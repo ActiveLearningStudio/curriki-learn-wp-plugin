@@ -10,6 +10,7 @@ require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/capstone-submissions.php' );
 require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/policy-document.php' );
 require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/districts.php' );
 require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/teachers.php' );
+require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/teacher-signup.php' );
 require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/students.php' );
 require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/schools.php' );
 require_once( LMS__PLUGIN_DIR . 'lms-rest-apis/classes.php' );
@@ -72,6 +73,7 @@ class LMS_REST_API
 		
 		Rest_Lxp_District::init();
 		Rest_Lxp_Teacher::init();
+		Rest_Lxp_Teacher_Signup::init();
 		Rest_Lxp_Student::init();
 		Rest_Lxp_School::init();
 		Rest_Lxp_Class::init();

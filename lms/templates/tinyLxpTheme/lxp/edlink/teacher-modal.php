@@ -107,46 +107,25 @@
                     <div class="horizontal_line"></div>
                     <div class="input_section">
                         <h3 class="modal-title assign-text">Assign Grades</h3>
+                        <?php
+                            // Rendered from the canonical list rather than hand-written
+                            // markup. The hardcoded version stopped at 9th, so a teacher
+                            // who signed themselves up teaching 10th-12th had no checkbox
+                            // to represent those grades — and re-saving here silently
+                            // dropped them. See lxp_get_grade_options() in tl-constants.php.
+                            $lxp_grade_options = function_exists('lxp_get_grade_options') ? lxp_get_grade_options() : array();
+                            $lxp_grade_index   = 0;
+                        ?>
                         <div class="input_box brief_input_box">
+                            <?php foreach ($lxp_grade_options as $lxp_grade) :
+                                $lxp_grade_index++;
+                                $lxp_grade_id = 'gradeCheckbox' . $lxp_grade_index;
+                            ?>
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox1" value="1st">
-                                <label class="form-check-label" for="gradeCheckbox1">1st</label>
+                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="<?php echo esc_attr($lxp_grade_id); ?>" value="<?php echo esc_attr($lxp_grade); ?>">
+                                <label class="form-check-label" for="<?php echo esc_attr($lxp_grade_id); ?>"><?php echo esc_html($lxp_grade); ?></label>
                             </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox2" value="2nd">
-                                <label class="form-check-label" for="gradeCheckbox2">2nd</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox3" value="3rd">
-                                <label class="form-check-label" for="gradeCheckbox3">3rd</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox4" value="4th">
-                                <label class="form-check-label" for="gradeCheckbox4">4th</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox5" value="5th">
-                                <label class="form-check-label" for="gradeCheckbox5">5th</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox6" value="6th">
-                                <label class="form-check-label" for="gradeCheckbox6">6th</label>
-                            </div>
-                        </div>
-
-                        <div class="input_box brief_input_box">
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox7" value="7th">
-                                <label class="form-check-label" for="gradeCheckbox7">7th</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox8" value="8th">
-                                <label class="form-check-label" for="gradeCheckbox8">8th</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input grade-checkbox" type="checkbox" name="grades[]" id="gradeCheckbox9" value="9th">
-                                <label class="form-check-label" for="gradeCheckbox9">9th</label>
-                            </div>
+                            <?php endforeach; ?>
                         </div>
                         <div class="btn_box">
                             <button class="btn" type="button" data-bs-dismiss="modal"

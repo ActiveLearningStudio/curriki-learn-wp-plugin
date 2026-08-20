@@ -119,9 +119,14 @@ The direction of assignment is inverted between the two flows. The old one is **
 
 `provision_member()` writes both, so token students are visible to surfaces that have never heard of the members table.
 
-> **The clobber, and how it's closed.** `Rest_Lxp_Class::create()` rebuilds `lxp_student_ids` wholesale from the modal's checkbox list — `delete_post_meta()` then re-add. A token student missing from that list would be silently evicted from the meta while the table still called them active: seat still consumed, roster still showing them, but gone from the Student Courses widget with no error anywhere.
+> **The clobber, and how it's closed.** `Rest_Lxp_Class::create()` used to rebuild `lxp_student_ids` wholesale on every save — `delete_post_meta()` then re-add from the modal's checkbox list. A token student missing from that list would be silently evicted from the meta while the table still called them active: seat still consumed, roster still showing them, but gone from the Student Courses widget with no error anywhere.
 >
-> `Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` now runs at the end of every class save. It re-adds any active member the rebuild missed and drops any the table marks removed. **Students with no row in the members table are left completely untouched** — it only ever speaks for token members.
+> Two things close it now:
+>
+> 1. **The rebuild is conditional.** The class modal no longer has a student picker at all, so `student_ids` is usually absent from the request; `create()` only wipes and rebuilds when it is actually present. `student_ids` was also dropped from `required` in the route args, which it had been. An ordinary save (rename, schedule edit, course change) never touches the meta.
+> 2. **`Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` runs unconditionally** at the end of every class save. It re-adds any active member a rebuild missed and drops any the table marks removed. **Students with no row in the members table are left completely untouched** — it only ever speaks for token members.
+>
+> Both matter. (1) alone would still lose non-token students the day something starts posting `student_ids` again; (2) alone only ever restores the token ones, which is what made the original loss silent *and* partial.
 >
 > `TL_Class_Member_Repository::set_removed()` does *not* touch the meta. Any future "remove student" flow must call the reconciler afterwards, or the student lingers in every dashboard.
 
@@ -170,7 +175,20 @@ The class code alone is **not** sufficient to log back in: classmates share it. 
 /student-courses/?claim=<48 hex>&class_code=<6 chars>
 ```
 
-`class_code` is not decoration: the Student Courses widget is a two-step UI (class picker → that class's courses) and reads `?class_code=` on load to open straight on step 2. A token student is normally in exactly one class, so the picker is pure friction. Both `build_claim_url()` and `landing_url()` append it.
+`class_code` is not decoration — it is now the **only** thing that tells the Student Courses widget what to show. Both `build_claim_url()` and `landing_url()` append it.
+
+### The Student Courses widget is single-class
+
+It used to be a two-step UI: a grid of every class the student belonged to, then that class's courses. `?class_code=` merely toggled `hidden` attributes, so **all** of the student's classes were in page source on every load regardless.
+
+It now renders exactly one class, server-side:
+
+1. `?class_code=` is read and upper-cased (codes mint uppercase; a lowercased URL used to fall through the case-sensitive JS selector and silently show the full list).
+2. The `tl_class` post is resolved by `lxp_class_code`.
+3. **Membership is re-asserted** against that class's own `lxp_student_ids` — the same check `Rest_Lxp_Student::access_login()` makes. A code on its own never grants a view; classmates share codes, and `/lms/v1/class/by-code` is `__return_true`.
+4. With no `class_code` in the URL, it falls back to the student's class **only if they are in exactly one** — still a single-class view, and it keeps a bookmarked URL working. Zero or more than one renders the empty state.
+
+Anything else renders the empty-state message, never a list. `back_label` is retired; `empty_message` now reads as "use the link your teacher gave you".
 
 ### The ticket screen, and the bookmark hand-off
 
@@ -210,10 +228,13 @@ Toggle: **Admin → Schools → edit → Student privacy** checkbox (`admin-scho
 |---|---|
 | Join form (student) | [lxp-class-join-widget.php](../includes/widgets/lxp-class-join-widget.php) — Elementor `lxp-class-join` |
 | Bookmark prompt (student) | [lxp-bookmark-prompt-widget.php](../includes/widgets/lxp-bookmark-prompt-widget.php) — Elementor `lxp-bookmark-prompt` |
+| Course list (student) | [lxp-student-courses-widget.php](../includes/widgets/lxp-student-courses-widget.php) — Elementor `lxp-student-courses`, single-class (§6) |
 | Roster + claim links (teacher) | [class-roster-modal.php](../lms/templates/tinyLxpTheme/lxp/class-roster-modal.php) |
-| Code controls | `teacher-class-modal.php`, `admin-class-modal.php` |
+| Code controls | `teacher-class-modal.php`, `admin-class-modal.php` — now the **left** column, where Schedule used to be |
 | Seats badge + Roster button | `teacher-classes.php`, `admin-classes.php` |
 | Token-mode toggle | `admin-school-modal.php`, `admin-schools.php` |
+
+The class modal has lost its Grade select, its Students picker and its Class/Group type radios. Grades are inherited from the teacher (`lxp_class_grades`), students arrive by redemption or the Roster modal, and `type` is posted as a fixed hidden `classes`. Registration Code moved into the left column and Schedule became an optional collapsed section on the right — the code is what teachers actually hand out.
 
 **The join widget contains no name, email, DOB or password input anywhere in its markup.** That absence is the form-level enforcement the spec requires — it is not a validation rule that can be bypassed. It also handles `?claim=` (resume) and `?class_code=` (deep link) from the URL.
 

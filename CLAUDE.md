@@ -89,6 +89,10 @@ wp rest route list --namespace=lms/v1 --fields=route,methods
 | 14 | Class membership is stored **twice on purpose**: `lxp_student_ids` post meta (what every dashboard reads) and `lxp_class_members` (seats, aliases, claim secrets). Any code that rewrites the meta wholesale must call `Rest_Lxp_Class_Redemption::reconcile_class_student_meta($class_id)` afterwards or token students are silently evicted. |
 | 15 | Roster vault (Zone B): a **fresh IV per save** is mandatory — reusing a GCM nonce under one key leaks the keystream. `roster-vault.php` must never gain a decrypt call; it only stores and gates. `kdf_params.algo` is what makes a future Argon2id migration possible — do not drop it. Run `node tests/roster-vault.test.js` after touching the crypto. |
 | 16 | Any REST call that relies on `is_user_logged_in()` / `current_user_can()` **inside** the callback (the pattern this codebase uses instead of a real `permission_callback`) must send an `X-WP-Nonce: wp_create_nonce('wp_rest')` header from cookie-authenticated JS. Without it, WP core's `rest_cookie_check_errors()` silently force-logs the request out (`wp_set_current_user(0)`) rather than erroring — the callback then rejects with a generic "not allowed" message that looks like an ownership bug. See `class-roster-modal.php`'s `restNonce` / `RosterVault`'s `opts.nonce` for the pattern. |
+| 17 | `POST /lms/v1/classes/save` no longer requires `student_ids`, and `Rest_Lxp_Class::create()` only rewrites `lxp_student_ids` when that param is actually present. The class modal has no student picker any more (students arrive by code redemption or the Roster modal), so an unconditional `delete_post_meta()` + rebuild would evict every non-token student on an ordinary save — and `reconcile_class_student_meta()` only restores the *token* ones, making the loss silent and partial. Do not restore the unconditional wipe. |
+| 18 | A class stores its grade levels **twice**: `lxp_class_grades` (repeating, the full set inherited from the teacher's signup) and `grade` (single string, the first entry). `grade` cannot be dropped — the class list column reads it and `Rest_Lxp_Class_Redemption` seeds a token student's own `grades` meta from it. Write both via `Rest_Lxp_Class::save_class_grades()`. |
+| 19 | `lxp_get_grade_options()` lives in `lms/tl-constants.php`, **not** `lxp/functions.php`, because the teacher-signup REST callback has to validate against it and `functions.php` is not loaded in REST context (gotcha #13). All grade checkbox/select markup should render from it — the old hardcoded lists disagreed (people modals 1st–9th, class modal 1st–12th), which silently truncated a teacher's grades on re-save. |
+| 20 | `teacher-classes.php` renders **no** navigation — the top navbar and the section nav row were both removed, and logout now lives as a plain link in the heading row. Do not reintroduce `trek/navigation.php` or `trek/user-profile-block.php` there without also removing that logout link, or teachers get two. |
 
 ---
 
@@ -121,6 +125,27 @@ A `tl_class` post can be directly linked to one or more LearnPress courses (`lp_
 **UI**: Both `admin-class-modal.php` and `teacher-class-modal.php` include a Courses dropdown picker (loaded via `loadAvailableCourses()` on page load). Both class list tables (`admin-classes.php`, `teacher-classes.php`) show a Courses count column.
 
 **Note**: This is a direct association only. It does not auto-enroll students or create Assignments — those flows are independent.
+
+---
+
+## Teacher Self-Signup
+
+A teacher creates their own account from a public Elementor form, is signed in immediately, and lands on `/classes`.
+
+| Piece | Where |
+|---|---|
+| REST | `POST /lms/v1/teacher/signup` → `Rest_Lxp_Teacher_Signup` (`lms/lms-rest-apis/teacher-signup.php`) |
+| Widget | `LXP Teacher Signup` → `includes/widgets/lxp-teacher-signup-widget.php` |
+| Settings | wp-admin → **Curriki Learn → Teacher Signup** (`teacher_signup_settings_page_html()`) |
+| Options | `tl_signup_district_id`, `tl_signup_school_id` |
+
+The form collects first/last name, email, password + confirm, and grades — **no school or district field**. Placement comes from `tl_signup_school_id` server-side; letting a public form name its own school would let anyone join any school.
+
+**Prerequisite**: the configured school must have `lxp_school_district_id` set, or signup is refused. `teacher-classes.php` reads the district post's meta, so a district-less school would strand the teacher on their own landing page.
+
+Creates, as one unit with compensating deletes on failure: a WP user (role `lp_teacher`, `user_login` = email) **and** a `tl_teacher` post (`lxp_teacher_admin_id`, `lxp_teacher_school_id`, `grades` JSON, `settings_active`). Both halves are mandatory — `teacher-dashboard.php` hard-`die()`s for an `lp_teacher` user with no `tl_teacher` post.
+
+Distinct from `Rest_Lxp_Teacher::create()` (the admin path), which takes `teacher_school_id` straight from the request with no capability check — never expose that one publicly.
 
 ---
 
