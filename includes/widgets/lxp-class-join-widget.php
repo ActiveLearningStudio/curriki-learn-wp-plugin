@@ -45,9 +45,10 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 		] );
 
 		$this->add_control( 'alias_label', [
-			'label'   => esc_html__( 'Seat Field Label', 'tinylxp' ),
-			'type'    => Controls_Manager::TEXT,
-			'default' => esc_html__( 'Pick your seat', 'tinylxp' ),
+			'label'       => esc_html__( 'Nickname Field Label', 'tinylxp' ),
+			'type'        => Controls_Manager::TEXT,
+			'default'     => esc_html__( 'Choose a nickname', 'tinylxp' ),
+			'description' => esc_html__( 'Keep this asking for a nickname. Students type this freely and it becomes their display name on the server, so wording that invites a real name defeats the point of the privacy design.', 'tinylxp' ),
 		] );
 
 		$this->add_control( 'button_label', [
@@ -188,8 +189,7 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 			margin-bottom: 6px;
 			color: <?php echo $text_col; ?>;
 		}
-		#<?php echo esc_attr( $uid ); ?> input[type="text"],
-		#<?php echo esc_attr( $uid ); ?> select {
+		#<?php echo esc_attr( $uid ); ?> input[type="text"] {
 			width: 100%;
 			box-sizing: border-box;
 			padding: 10px 12px;
@@ -230,7 +230,16 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 			color: #5f6368;
 			text-align: center;
 		}
+		/* Resting state. Revealed by showAlias() with an explicit display:block —
+		   an empty string would only drop the inline value and let this rule win
+		   again. */
 		#<?php echo esc_attr( $uid ); ?> .lxp-cj-seat-wrap { display: none; }
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-class-name {
+			font-size: 13px;
+			color: #137333;
+			min-height: 18px;
+			margin: -6px 0 10px;
+		}
 
 		/* ── Ticket screen ─────────────────────────────────────────────── */
 		#<?php echo esc_attr( $uid ); ?> .lxp-cj-ticket { text-align: center; }
@@ -295,10 +304,19 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 				<input type="text" id="<?php echo esc_attr( $uid ); ?>-code" class="lxp-cj-code"
 				       maxlength="6" required autocapitalize="characters" spellcheck="false" />
 
+				<div class="lxp-cj-class-name" aria-live="polite"></div>
+
+				<!--
+					One control, always: the student types a nickname. The old
+					alternative — a dropdown of teacher-assigned seat labels — was
+					dropped at the client's request. Keep the wording pointed at a
+					nickname: with no dropdown left, that framing plus the server's
+					looks_like_pii() screen is what keeps real names off the server.
+				-->
 				<div class="lxp-cj-seat-wrap">
-					<label for="<?php echo esc_attr( $uid ); ?>-seat"><?php echo $alias_label; ?></label>
-					<select id="<?php echo esc_attr( $uid ); ?>-seat" class="lxp-cj-seat"></select>
-					<input type="text" class="lxp-cj-alias" style="display:none" maxlength="32"
+					<label for="<?php echo esc_attr( $uid ); ?>-alias"><?php echo $alias_label; ?></label>
+					<input type="text" id="<?php echo esc_attr( $uid ); ?>-alias" class="lxp-cj-alias"
+					       maxlength="32" autocomplete="off" spellcheck="false"
 					       placeholder="<?php echo esc_attr__( 'Choose a nickname', 'tinylxp' ); ?>" />
 				</div>
 
@@ -340,13 +358,13 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 			var root = document.getElementById(<?php echo wp_json_encode( $uid ); ?>);
 			if (!root) return;
 
-			var form      = root.querySelector('.lxp-cj-form');
-			var codeInput = root.querySelector('.lxp-cj-code');
-			var seatWrap  = root.querySelector('.lxp-cj-seat-wrap');
-			var seatSel   = root.querySelector('.lxp-cj-seat');
-			var aliasIn   = root.querySelector('.lxp-cj-alias');
-			var btn       = root.querySelector('.lxp-cj-btn');
-			var msg       = root.querySelector('.lxp-cj-msg');
+			var form        = root.querySelector('.lxp-cj-form');
+			var codeInput   = root.querySelector('.lxp-cj-code');
+			var seatWrap    = root.querySelector('.lxp-cj-seat-wrap');
+			var aliasIn     = root.querySelector('.lxp-cj-alias');
+			var classNameEl = root.querySelector('.lxp-cj-class-name');
+			var btn         = root.querySelector('.lxp-cj-btn');
+			var msg         = root.querySelector('.lxp-cj-msg');
 
 			var ticket      = root.querySelector('.lxp-cj-ticket');
 			var ticketBadge = root.querySelector('.lxp-cj-seat-badge');
@@ -359,8 +377,16 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 			var claimUrl  = <?php echo wp_json_encode( $claim_url ); ?>;
 			var seatsUrl  = <?php echo wp_json_encode( $seats_url ); ?>;
 
-			var params    = new URLSearchParams(window.location.search);
-			var aliasMode = 'assigned';
+			var params = new URLSearchParams(window.location.search);
+
+			// Mirrors Rest_Lxp_Class_Redemption::ALIAS_PATTERN and looks_like_pii().
+			// A convenience only — the server re-checks both and stays the authority.
+			var ALIAS_PATTERN = /^[A-Za-z0-9 ._-]{2,32}$/;
+
+			function looksLikePii(alias) {
+				if (alias.indexOf('@') !== -1) { return true; }
+				return alias.replace(/\D/g, '').length >= 7;
+			}
 
 			function fail(text) {
 				msg.textContent = text || 'Something went wrong. Please try again.';
@@ -403,46 +429,52 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 				return;
 			}
 
-			// --- Load the seat list once a full code is entered. --------------
+			function hideAlias() {
+				// 'none' beats the stylesheet; see showAlias() for why the inverse
+				// is not simply ''.
+				seatWrap.style.display = 'none';
+				classNameEl.textContent = '';
+			}
+
+			function showAlias() {
+				// MUST be an explicit 'block', never ''. The widget's own stylesheet
+				// carries `.lxp-cj-seat-wrap { display: none }` as the resting state,
+				// and assigning '' only clears the *inline* declaration — the cascade
+				// then falls straight back to that rule and the field stays hidden.
+				// That was the bug that made the nickname field impossible to reach.
+				seatWrap.style.display = 'block';
+			}
+
+			// --- Check the code once it is complete. --------------------------
+			// The student types a nickname, so there is no seat list to fetch; this
+			// exists to confirm *which* class the code opens, and to catch a full
+			// class, before they bother typing anything.
 			function loadSeats(code) {
 				return post(seatsUrl, { class_code: code }).then(function(r) {
 					if (!r.ok || !r.json || !r.json.success) {
-						seatWrap.style.display = 'none';
+						hideAlias();
+						msg.style.color = '#d93025';
+						msg.textContent = errorText(r);
 						return false;
 					}
 
 					var d = r.json.data;
-					aliasMode = d.alias_mode;
 
 					if (d.is_full) {
+						hideAlias();
+						msg.style.color = '#d93025';
 						msg.textContent = 'This class is full. Please check with your teacher.';
-						seatWrap.style.display = 'none';
 						return false;
 					}
 
-					if (aliasMode === 'open') {
-						seatSel.style.display = 'none';
-						aliasIn.style.display = '';
-					} else {
-						seatSel.style.display = '';
-						aliasIn.style.display = 'none';
-						seatSel.innerHTML = '';
-						(d.open_seats || []).forEach(function(label) {
-							var opt = document.createElement('option');
-							opt.value = label;
-							opt.textContent = label;
-							seatSel.appendChild(opt);
-						});
-						if (!seatSel.options.length) {
-							msg.textContent = 'No seats are free in this class. Please check with your teacher.';
-							seatWrap.style.display = 'none';
-							return false;
-						}
-					}
-
+					classNameEl.textContent = d.class_name ? 'Joining: ' + d.class_name : '';
 					msg.textContent = '';
-					seatWrap.style.display = '';
+					showAlias();
+					aliasIn.focus();
 					return true;
+				}).catch(function() {
+					hideAlias();
+					return false;
 				});
 			}
 
@@ -457,11 +489,11 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 					lastLookedUp = codeInput.value;
 					loadSeats(codeInput.value);
 				} else {
-					seatWrap.style.display = 'none';
+					hideAlias();
 				}
 			});
 
-			// Deep link: ?class_code=XYZ pre-fills and loads seats immediately.
+			// Deep link: ?class_code=XYZ pre-fills and checks the code immediately.
 			var preCode = params.get('class_code');
 			if (preCode) {
 				codeInput.value = preCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -476,11 +508,19 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 				msg.textContent = '';
 
 				var code  = codeInput.value.trim().toUpperCase();
-				var alias = aliasMode === 'open' ? aliasIn.value.trim() : seatSel.value;
+				var alias = aliasIn.value.trim();
 
 				if (!code) { return; }
 				if (!alias) {
-					msg.textContent = 'Please choose your seat.';
+					msg.textContent = 'Please type a nickname.';
+					return;
+				}
+				if (!ALIAS_PATTERN.test(alias)) {
+					msg.textContent = 'Nicknames need 2 to 32 letters or numbers.';
+					return;
+				}
+				if (looksLikePii(alias)) {
+					msg.textContent = 'Please pick a nickname — not an email address or phone number.';
 					return;
 				}
 

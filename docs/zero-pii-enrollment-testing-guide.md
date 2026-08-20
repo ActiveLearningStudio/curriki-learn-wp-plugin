@@ -48,17 +48,20 @@ Worth knowing before you start, since they explain why earlier test runs may hav
 
 ## Phase 1 — Zone A: class setup and code redemption
 
-- [ ] **1.1** Create a test class (teacher or admin dashboard). Attach 2 published LearnPress courses. Set `Max Seats = 3`, `Code Expires` = tomorrow, `Alias Mode = assigned`. Save, note the class code.
+- [ ] **1.1** Create a test class (teacher or admin dashboard). Attach 2 published LearnPress courses. Set `Max Seats = 3` and `Code Expires` = tomorrow. Save, note the class code.
+  *(There is no Student Name Mode field any more — every class is nickname-typed.)*
   ```sql
   SELECT ID, post_title FROM wp_posts WHERE post_type = 'tl_class' ORDER BY ID DESC LIMIT 1;
   SELECT meta_key, meta_value FROM wp_postmeta WHERE post_id = <class_id> AND meta_key LIKE 'lxp_class%';
   ```
-  Expect `lxp_class_code`, `lxp_class_max_seats=3`, `lxp_class_code_expires`, `lxp_class_alias_mode=assigned`, repeating `lxp_class_seat_labels`.
+  Expect `lxp_class_code`, `lxp_class_max_seats=3`, `lxp_class_code_expires`, repeating `lxp_class_seat_labels`, and repeating `lxp_class_grades` inherited from the teacher's signup. `lxp_class_alias_mode` should be **absent** on a newly created class — it is vestigial and no longer written.
 
-- [ ] **1.2** Open the class's Roster modal. Expect unclaimed seat labels (`Student 01`, `Student 02`, `Student 03`), no claim links yet. *(This is the step that hit the nonce bug — should now work after a hard reload.)*
+- [ ] **1.2** Open the class's Roster modal. Expect unclaimed seat labels (`Student 01`, `Student 02`, `Student 03`), no claim links yet. *(Seat labels are the Roster/claim-link flow and are unaffected by nickname joining.)*
 
-- [ ] **1.3** Redeem a seat (student, private window): enter the class code, pick an alias, submit.
-  - Expect the **ticket screen** (not an immediate redirect): seat label badge, the claim link shown as selectable text, a "Copy my link" button, the bookmark instruction, and a "Go to my class" button. **Save the link now** — it can never be re-shown.
+- [ ] **1.3** Join (student, private window): enter the class code.
+  - As soon as the 6th character lands, expect **"Joining: &lt;class name&gt;"** and the **nickname field to appear**. *(If the nickname field stays hidden, that is the `display:none` cascade bug returning — see §3b of the Zone A doc.)*
+  - Type a nickname and submit.
+  - Expect the **ticket screen** (not an immediate redirect): the nickname on the badge, the claim link shown as selectable text, a "Copy my link" button, the bookmark instruction, and a "Go to my class" button. **Save the link now** — it can never be re-shown.
   - Check the copy button works. On plain `http://` it falls back to `document.execCommand('copy')`, so test it on whatever protocol your dev site actually uses.
   - Click "Go to my class" → lands on `/student-courses/?claim=…&class_code=…`. Expect: the **⭐ Save this page!** banner (showing `Ctrl+D`, or `⌘D` on a Mac), and the Student Courses widget already open on **your class's courses**, not its class-picker step.
   - Click **"I've bookmarked it"** → banner disappears and the URL becomes `/student-courses/?class_code=…` with **no `claim` param**. Confirm the courses list stays put (no reload, still on your class).
@@ -125,9 +128,16 @@ For each, confirm: no new user, no new `tl_student` post, no new `lxp_class_memb
 - [ ] Revoked code (toggle `Revoke`, try the valid code)
 - [ ] Expired code (set `Code Expires` to yesterday)
 - [ ] Class full (redeem until `max_seats` hit, try one more)
-- [ ] Alias not in seat pool (`assigned` mode — needs a direct REST call, the UI dropdown won't offer an invalid one)
-- [ ] Email-shaped alias (switch a test class to `alias_mode=open`, try `student@test.com`)
+- [ ] Nickname too short (`a`) and too long (33+ characters)
+- [ ] Email-shaped nickname (`student@test.com`)
+- [ ] Phone-shaped nickname (`5551234567`)
+- [ ] Duplicate nickname — two students typing the same thing. The second must become `<nickname> 2`, **not** an error, and must be a separate account
 - [ ] Rate limit (>10 redeem/claim attempts in <10 min from one IP — the 11th should fail)
+- [ ] **Legacy class regression:** pick a class created before nickname-only joining (`SELECT post_id FROM wp_postmeta WHERE meta_key='lxp_class_alias_mode' AND meta_value='assigned'`). A typed nickname must be **accepted**. If it comes back rejected, `resolve_alias()` is still branching on the old meta.
+
+> Each rejection must leave **no** WP user, **no** `tl_student` post and **no** `lxp_class_members` row, and must not consume a seat.
+>
+> Messages: bad nickname / seat taken / class full / rate limited each say what is actually wrong. Wrong, revoked and expired codes must all return the **same** generic text — that indistinguishability is deliberate anti-enumeration, so if you can tell them apart, that is a regression.
 
 ---
 

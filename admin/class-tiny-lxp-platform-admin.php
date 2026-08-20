@@ -358,6 +358,15 @@ class Tiny_LXP_Platform_Admin
             array( $this, 'video_layouts_reference_page' )
         );
 
+        add_submenu_page(
+            'curriki-learn',
+            __( 'Teacher Signup', 'tiny-lxp-platform' ),
+            __( 'Teacher Signup', 'tiny-lxp-platform' ),
+            'manage_options',
+            'curriki-learn-teacher-signup',
+            array( $this, 'teacher_signup_settings_page_html' )
+        );
+
         // Remove the auto-created duplicate top-level submenu item.
         remove_submenu_page( 'curriki-learn', 'curriki-learn' );
     }
@@ -751,6 +760,19 @@ class Tiny_LXP_Platform_Admin
             [ 'class' => 'row', 'label_for' => 'tl_student_default_password' ]
         );
 
+        // Register teacher self-signup placement settings.
+        // Every self-signed-up teacher is attached to this one school; the
+        // public signup form deliberately does not let the caller choose.
+        // See Rest_Lxp_Teacher_Signup.
+        register_setting( 'tiny-lxp-platform', 'tl_signup_district_id', [
+            'sanitize_callback' => 'absint',
+            'default'           => 0,
+        ] );
+        register_setting( 'tiny-lxp-platform', 'tl_signup_school_id', [
+            'sanitize_callback' => 'absint',
+            'default'           => 0,
+        ] );
+
         // Register a new setting for 'edlink' options
         register_setting('edlink_options_group', 'edlink_options');
         
@@ -948,6 +970,140 @@ class Tiny_LXP_Platform_Admin
 
         echo('  </form>' . "\n");
         echo('</div>' . "\n");
+    }
+
+    /**
+     * "Curriki Learn -> Teacher Signup" settings page.
+     *
+     * Picks the district and school that every self-signed-up teacher is
+     * attached to. Hand-built like remotion_settings_page_html() rather than
+     * going through do_settings_sections(), because the school select has to be
+     * filtered by the chosen district client-side.
+     *
+     * @see Rest_Lxp_Teacher_Signup
+     */
+    public function teacher_signup_settings_page_html()
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        settings_errors();
+
+        $selected_district = (int) get_option('tl_signup_district_id', 0);
+        $selected_school   = (int) get_option('tl_signup_school_id', 0);
+
+        $districts = get_posts(array(
+            'post_type'      => TL_DISTRICT_CPT,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'orderby'        => 'title',
+            'order'          => 'ASC',
+        ));
+
+        $schools = get_posts(array(
+            'post_type'      => TL_SCHOOL_CPT,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'orderby'        => 'title',
+            'order'          => 'ASC',
+        ));
+
+        // Map each school to its district so the JS below can filter the list,
+        // and so we can warn about schools that have no district at all.
+        $school_district = array();
+        foreach ($schools as $school) {
+            $school_district[$school->ID] = (int) get_post_meta($school->ID, 'lxp_school_district_id', true);
+        }
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html__('Teacher Signup', 'tiny-lxp-platform'); ?></h1>
+            <p class="description">
+                <?php echo esc_html__('Teachers who create their own account through the LXP Teacher Signup widget are attached to the school selected here. The public signup form does not ask which school — this is the only place it is decided.', 'tiny-lxp-platform'); ?>
+            </p>
+
+            <form action="<?php echo esc_url('options.php'); ?>" method="post">
+                <?php settings_fields('tiny-lxp-platform'); ?>
+                <table class="form-table" role="presentation">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><label for="tl_signup_district_id"><?php echo esc_html__('District', 'tiny-lxp-platform'); ?></label></th>
+                            <td>
+                                <select id="tl_signup_district_id" name="tl_signup_district_id">
+                                    <option value="0"><?php echo esc_html__('— Select a district —', 'tiny-lxp-platform'); ?></option>
+                                    <?php foreach ($districts as $district) : ?>
+                                        <option value="<?php echo esc_attr($district->ID); ?>" <?php selected($selected_district, $district->ID); ?>>
+                                            <?php echo esc_html($district->post_title); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <p class="description"><?php echo esc_html__('Narrows the school list below.', 'tiny-lxp-platform'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="tl_signup_school_id"><?php echo esc_html__('School', 'tiny-lxp-platform'); ?></label></th>
+                            <td>
+                                <select id="tl_signup_school_id" name="tl_signup_school_id">
+                                    <option value="0"><?php echo esc_html__('— Select a school —', 'tiny-lxp-platform'); ?></option>
+                                    <?php foreach ($schools as $school) : ?>
+                                        <option value="<?php echo esc_attr($school->ID); ?>"
+                                                data-district="<?php echo esc_attr($school_district[$school->ID]); ?>"
+                                                <?php selected($selected_school, $school->ID); ?>>
+                                            <?php echo esc_html($school->post_title); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <p class="description"><?php echo esc_html__('Every teacher who signs themselves up joins this school.', 'tiny-lxp-platform'); ?></p>
+                                <?php
+                                // A school with no district makes /classes fatal for the
+                                // teacher who lands on it — that template reads the
+                                // district post's meta with no null guard. Refuse loudly
+                                // here rather than let someone sign up into a dead end.
+                                if ($selected_school && empty($school_district[$selected_school])) :
+                                    ?>
+                                    <div class="notice notice-error inline" style="margin-top:8px">
+                                        <p><strong><?php echo esc_html__('This school has no district assigned.', 'tiny-lxp-platform'); ?></strong>
+                                        <?php echo esc_html__('Teacher signup will be refused until you set one on the school record — a teacher attached to a district-less school cannot open the Classes page.', 'tiny-lxp-platform'); ?></p>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php submit_button(); ?>
+            </form>
+        </div>
+
+        <script>
+        (function () {
+            var districtSelect = document.getElementById('tl_signup_district_id');
+            var schoolSelect   = document.getElementById('tl_signup_school_id');
+            if (!districtSelect || !schoolSelect) { return; }
+
+            // Options are hidden rather than removed so switching districts back
+            // and forth does not lose the list.
+            function filterSchools() {
+                var districtId = districtSelect.value;
+                var selectedStillVisible = false;
+
+                Array.prototype.forEach.call(schoolSelect.options, function (opt) {
+                    if (!opt.value || opt.value === '0') { return; }
+                    var match = (districtId === '0') || (opt.getAttribute('data-district') === districtId);
+                    opt.hidden = !match;
+                    opt.disabled = !match;
+                    if (match && opt.selected) { selectedStillVisible = true; }
+                });
+
+                // Selecting a district that excludes the current school would
+                // otherwise leave an invisible-but-selected value in the form.
+                if (!selectedStillVisible) { schoolSelect.value = '0'; }
+            }
+
+            districtSelect.addEventListener('change', filterSchools);
+            filterSchools();
+        })();
+        </script>
+        <?php
     }
 
     public function view_page_html()

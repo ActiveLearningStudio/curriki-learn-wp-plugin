@@ -77,15 +77,15 @@ class Rest_Lxp_Class
 					// 		return strlen( $param ) > 1;
 					// 	}
 					// ),
+					// Deliberately NOT required. The class modal no longer carries a
+					// student picker — students reach a class by redeeming its code or
+					// through the Roster modal — so most saves omit this entirely.
+					// create() only rewrites lxp_student_ids when it is actually sent.
 					'student_ids' => array(
-						'required' => true,
+						'required' => false,
 						'description' => 'class students',
 						'validate_callback' => function($param, $request, $key) {
-							if (count( $param ) > 0) {
-								return true;
-							} else {
-								return false;
-							}
+							return is_array( $param );
 						}
 					),
 					'class_teacher_id' => array(
@@ -219,16 +219,22 @@ class Rest_Lxp_Class
 
 		// Checkboxes only post when checked, so treat an absent value as unchecked
 		// whenever the modal declares it submitted the code-controls block.
+		//
+		// There is no alias-mode choice any more: students always type a nickname.
+		// See Rest_Lxp_Class_Redemption::resolve_alias(). `lxp_class_alias_mode`
+		// survives as dead meta on classes created before that change; nothing
+		// reads it.
 		if ( $request->get_param('lxp_class_code_controls') ) {
 			$revoked = filter_var($request->get_param('lxp_class_code_revoked'), FILTER_VALIDATE_BOOLEAN);
 			update_post_meta($class_post_id, 'lxp_class_code_revoked', $revoked ? '1' : '');
-
-			$alias_mode = 'open' === $request->get_param('lxp_class_alias_mode') ? 'open' : 'assigned';
-			update_post_meta($class_post_id, 'lxp_class_alias_mode', $alias_mode);
 		}
 
-		$grade = $request->get_param('grade') && $request->get_param('grade') != '0' ? $request->get_param('grade') : '';
-		update_post_meta($class_post_id, 'grade', $grade);
+		// ===== Grades ========================================================
+		// The class modal no longer asks for a grade — a class inherits the set
+		// the teacher chose at signup. `grade` (singular) is legacy and still
+		// read by the class list and by Rest_Lxp_Class_Redemption when it seeds
+		// a token student's grades, so it is kept in sync with the first entry.
+		self::save_class_grades($class_post_id, $class_teacher_id, $request);
 
 		if(get_post_meta($class_post_id, 'lxp_class_teacher_id', true)) {
 			update_post_meta($class_post_id, 'lxp_class_teacher_id', $class_teacher_id);
@@ -241,17 +247,25 @@ class Rest_Lxp_Class
 		} else {
 			add_post_meta($class_post_id, 'edlink_class_sec_id', $edlink_class_sec_id, true);
 		}
-		delete_post_meta($class_post_id, 'lxp_student_ids');
+		// Only rebuild membership when the caller actually submitted a roster.
+		// The teacher class modal no longer has a student picker, so an
+		// unconditional wipe here would evict every non-token student on the
+		// class on every ordinary save (renaming it, editing its schedule...) —
+		// and reconcile_class_student_meta() below would only bring the token
+		// ones back, making the loss silent and partial.
 		$student_ids = $request->get_param('student_ids');
-		foreach ($student_ids as $student_id) {
-			add_post_meta($class_post_id, 'lxp_student_ids', $student_id);
+		if (is_array($student_ids)) {
+			delete_post_meta($class_post_id, 'lxp_student_ids');
+			foreach ($student_ids as $student_id) {
+				add_post_meta($class_post_id, 'lxp_student_ids', $student_id);
+			}
 		}
 
-		// The rebuild above wipes the list and repopulates it from the modal's
-		// checkboxes. Token students who joined by code may not be in that list,
-		// so re-add anyone lxp_class_members still counts as an active member —
-		// otherwise saving a class silently evicts them. Non-token students are
-		// untouched. See Rest_Lxp_Class_Redemption::reconcile_class_student_meta().
+		// Token students who joined by code are not in the modal's checkbox set,
+		// so re-add anyone lxp_class_members still counts as an active member.
+		// Runs unconditionally: cheap, idempotent, and the safety net for any
+		// other path that rewrites the meta wholesale.
+		// See Rest_Lxp_Class_Redemption::reconcile_class_student_meta().
 		if (class_exists('Rest_Lxp_Class_Redemption')) {
 			Rest_Lxp_Class_Redemption::reconcile_class_student_meta($class_post_id);
 		}
@@ -288,6 +302,77 @@ class Rest_Lxp_Class
         return wp_send_json_success("Class Saved!");
     }
 
+	/**
+	 * Persist a class's grade levels.
+	 *
+	 * Two keys are written on purpose:
+	 *   - lxp_class_grades — repeating meta, the full set (new).
+	 *   - grade            — single string, the first entry (legacy).
+	 *
+	 * The legacy key cannot simply be dropped: the class list column reads it,
+	 * and Rest_Lxp_Class_Redemption seeds a token student's own `grades` meta
+	 * from it when they redeem a seat.
+	 *
+	 * Precedence: an explicitly submitted grade/grades always wins (that is how
+	 * admin-class-modal.php and any future picker stay in control). Only when
+	 * nothing was submitted AND the class has no grades yet do we inherit the
+	 * teacher's signup selection — so re-saving a class never silently
+	 * overwrites a grade someone set by hand.
+	 *
+	 * @param int             $class_post_id    tl_class post ID.
+	 * @param int             $class_teacher_id tl_teacher post ID (not a user ID).
+	 * @param WP_REST_Request $request
+	 */
+	private static function save_class_grades($class_post_id, $class_teacher_id, $request) {
+		$grades = array();
+
+		// 1. Explicit multi-value submission.
+		$submitted_grades = $request->get_param('grades');
+		if (is_array($submitted_grades)) {
+			$grades = $submitted_grades;
+		}
+
+		// 2. Explicit single-value submission (legacy modal field, '0' = none).
+		if (empty($grades)) {
+			$submitted_grade = $request->get_param('grade');
+			if ($submitted_grade && '0' !== (string) $submitted_grade) {
+				$grades = array($submitted_grade);
+			}
+		}
+
+		// 3. Inherit from the teacher, but only for a class that has no grades at
+		// all yet. Checking the legacy singular key too matters: classes created
+		// before lxp_class_grades existed have only `grade`, and inheriting over
+		// them would silently replace a value someone chose by hand.
+		$has_grades = get_post_meta($class_post_id, 'lxp_class_grades')
+			|| '' !== (string) get_post_meta($class_post_id, 'grade', true);
+
+		if (empty($grades) && !$has_grades) {
+			$teacher_grades = json_decode(get_post_meta(absint($class_teacher_id), 'grades', true));
+			if (is_array($teacher_grades)) {
+				$grades = $teacher_grades;
+			}
+		}
+
+		// Nothing to write and nothing submitted — leave existing values alone.
+		if (empty($grades) && null === $request->get_param('grade') && null === $request->get_param('grades')) {
+			return;
+		}
+
+		$allowed = function_exists('lxp_get_grade_options') ? lxp_get_grade_options() : array();
+		$grades  = array_values(array_unique(array_filter(array_map(function($grade) use ($allowed) {
+			$grade = sanitize_text_field((string) $grade);
+			return (empty($allowed) || in_array($grade, $allowed, true)) ? $grade : '';
+		}, $grades))));
+
+		delete_post_meta($class_post_id, 'lxp_class_grades');
+		foreach ($grades as $grade) {
+			add_post_meta($class_post_id, 'lxp_class_grades', $grade);
+		}
+
+		update_post_meta($class_post_id, 'grade', isset($grades[0]) ? $grades[0] : '');
+	}
+
     public static function get_students($request) {
 		$class_id = $request->get_param('class_id');
 		$lxp_student_ids = get_post_meta($class_id, 'lxp_student_ids');
@@ -313,6 +398,8 @@ class Rest_Lxp_Class
 		$class_id = $request->get_param('class_id');
 		$class = get_post($class_id);
 		$class->grade = get_post_meta($class_id, 'grade', true);
+		// Full grade set (new); `grade` above is the first entry, kept for legacy readers.
+		$class->lxp_class_grades = get_post_meta($class_id, 'lxp_class_grades');
 		$class->lxp_class_teacher_id = get_post_meta($class_id, 'lxp_class_teacher_id', true);
 		$class->lxp_student_ids = get_post_meta($class_id, 'lxp_student_ids');
 		$class->schedule = json_decode(get_post_meta($class_id, 'schedule', true));
@@ -324,8 +411,6 @@ class Rest_Lxp_Class
 		$class->lxp_class_max_seats = (int) get_post_meta($class_id, 'lxp_class_max_seats', true);
 		$class->lxp_class_code_expires = get_post_meta($class_id, 'lxp_class_code_expires', true);
 		$class->lxp_class_code_revoked = (bool) get_post_meta($class_id, 'lxp_class_code_revoked', true);
-		$alias_mode = get_post_meta($class_id, 'lxp_class_alias_mode', true);
-		$class->lxp_class_alias_mode = 'open' === $alias_mode ? 'open' : 'assigned';
 		$members = new TL_Class_Member_Repository();
 		$class->lxp_class_seats_taken = $members->count_active($class_id);
 		return wp_send_json_success(array("class" => $class));

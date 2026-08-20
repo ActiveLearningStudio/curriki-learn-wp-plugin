@@ -59,9 +59,22 @@ Details worth knowing:
 - **We do not call `delete_user_items_old()` first.** LP's tool deletes and recreates, wiping progress on every re-assign; a student resuming a claim link must keep theirs, so `enroll()` no-ops when a row already exists.
 - **The direct `$wpdb` write survives as a fallback** for LP older than 4.2.5 (before `UserCourseModel` existed), guarded by `class_exists()`. `flush_lp_caches()` now serves only that path.
 
-### 3b. "No free-text real name" is enforced by removing the text field
+### 3b. "No free-text real name" — what is actually enforced now
 
-No regex can reject "Maria Garcia" while accepting "Student Fourteen". So classes default to **`alias_mode = assigned`**: the student picks an unclaimed label from the teacher's seat pool via a dropdown — there is no free-text input to abuse. `open` mode (student types a nickname) is opt-in per class and backstopped by `Rest_Lxp_Class_Redemption::looks_like_pii()`, which rejects email- and phone-shaped values.
+**This used to be a structural guarantee. It no longer is, and the difference matters.**
+
+The original design had two modes. `assigned` was the default: the student picked an unclaimed label from the teacher's seat pool via a dropdown, so there was **no free-text input to abuse** — the spec's "must not accept a real name" was satisfied by the absence of a text field rather than by a validation rule. `open` (student types a nickname) was opt-in per class.
+
+At the client's request, `assigned` was removed. Every class is now nickname-typed, `resolve_alias()` no longer branches, and `lxp_class_alias_mode` is vestigial meta that nothing reads.
+
+So the enforcement today is two weaker things:
+
+1. **Framing.** The field is labelled and placeholdered "Choose a nickname", and the Elementor control carries a note telling authors not to reword it into "Your name". This is a nudge, not a control.
+2. **`Rest_Lxp_Class_Redemption::looks_like_pii()`** — rejects email-shaped values (`@`) and phone-shaped ones (≥7 digits after stripping separators), plus the `ALIAS_PATTERN` charset/length limit. Mirrored client-side in the join widget for fast feedback; the server remains the authority.
+
+**No regex can reject "Maria Garcia" while accepting "Student Fourteen."** A student who types their real first name will have it stored as their `display_name` and `tl_student` post title. That is a known, accepted consequence of the product decision — not an oversight — but it means the "server never holds student PII" claim is now a matter of student behaviour, not of system design. Anyone reasoning about the COPPA/FERPA posture needs to know that.
+
+Zone B (the encrypted roster vault) is unaffected: it still holds the teacher's `token → real name` map, and it is still the only place a real name is *supposed* to live.
 
 ---
 
@@ -74,7 +87,7 @@ No regex can reject "Maria Garcia" while accepting "Student Fourteen". So classe
 | `lxp_class_max_seats` | int; `0` = unlimited |
 | `lxp_class_code_expires` | datetime; empty = never |
 | `lxp_class_code_revoked` | `'1'` or `''` |
-| `lxp_class_alias_mode` | `assigned` (default) or `open` |
+| `lxp_class_alias_mode` | **Vestigial.** Written by classes created before nickname-only joining; nothing reads it. See §3b. |
 | `lxp_class_seat_labels` | repeating — the alias pool (`Student 01`…) |
 
 Written through the existing `Rest_Lxp_Class::create()` (behind `POST /lms/v1/classes/save`), guarded by a `lxp_class_code_controls` hidden field so checkbox-absence isn't misread as "unchecked" by other callers. Returned by `get_one()`.
@@ -119,9 +132,14 @@ The direction of assignment is inverted between the two flows. The old one is **
 
 `provision_member()` writes both, so token students are visible to surfaces that have never heard of the members table.
 
-> **The clobber, and how it's closed.** `Rest_Lxp_Class::create()` rebuilds `lxp_student_ids` wholesale from the modal's checkbox list — `delete_post_meta()` then re-add. A token student missing from that list would be silently evicted from the meta while the table still called them active: seat still consumed, roster still showing them, but gone from the Student Courses widget with no error anywhere.
+> **The clobber, and how it's closed.** `Rest_Lxp_Class::create()` used to rebuild `lxp_student_ids` wholesale on every save — `delete_post_meta()` then re-add from the modal's checkbox list. A token student missing from that list would be silently evicted from the meta while the table still called them active: seat still consumed, roster still showing them, but gone from the Student Courses widget with no error anywhere.
 >
-> `Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` now runs at the end of every class save. It re-adds any active member the rebuild missed and drops any the table marks removed. **Students with no row in the members table are left completely untouched** — it only ever speaks for token members.
+> Two things close it now:
+>
+> 1. **The rebuild is conditional.** The class modal no longer has a student picker at all, so `student_ids` is usually absent from the request; `create()` only wipes and rebuilds when it is actually present. `student_ids` was also dropped from `required` in the route args, which it had been. An ordinary save (rename, schedule edit, course change) never touches the meta.
+> 2. **`Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` runs unconditionally** at the end of every class save. It re-adds any active member a rebuild missed and drops any the table marks removed. **Students with no row in the members table are left completely untouched** — it only ever speaks for token members.
+>
+> Both matter. (1) alone would still lose non-token students the day something starts posting `student_ids` again; (2) alone only ever restores the token ones, which is what made the original loss silent *and* partial.
 >
 > `TL_Class_Member_Repository::set_removed()` does *not* touch the meta. Any future "remove student" flow must call the reconciler afterwards, or the student lingers in every dashboard.
 
@@ -135,7 +153,7 @@ All in `Rest_Lxp_Class_Redemption` ([class-redemption.php](../lms/lms-rest-apis/
 |---|---|---|
 | `POST /lms/v1/class/redeem` | public | code + alias → provision + enroll + sign in |
 | `POST /lms/v1/class/claim` | public | claim token → resume account, no new seat |
-| `POST /lms/v1/class/seats` | public | open seat labels for a code (feeds the dropdown) |
+| `POST /lms/v1/class/seats` | public | confirms which class a code opens, and whether it is full. Named for the seat list it used to return; see §3b |
 | `POST /lms/v1/class/code/settings` | teacher | seats, expiry, revoke, alias mode, regenerate |
 | `POST /lms/v1/class/roster` | teacher | roster view |
 | `POST /lms/v1/class/roster/provision` | teacher | pre-create N seats (or explicit aliases) |
@@ -170,7 +188,20 @@ The class code alone is **not** sufficient to log back in: classmates share it. 
 /student-courses/?claim=<48 hex>&class_code=<6 chars>
 ```
 
-`class_code` is not decoration: the Student Courses widget is a two-step UI (class picker → that class's courses) and reads `?class_code=` on load to open straight on step 2. A token student is normally in exactly one class, so the picker is pure friction. Both `build_claim_url()` and `landing_url()` append it.
+`class_code` is not decoration — it is now the **only** thing that tells the Student Courses widget what to show. Both `build_claim_url()` and `landing_url()` append it.
+
+### The Student Courses widget is single-class
+
+It used to be a two-step UI: a grid of every class the student belonged to, then that class's courses. `?class_code=` merely toggled `hidden` attributes, so **all** of the student's classes were in page source on every load regardless.
+
+It now renders exactly one class, server-side:
+
+1. `?class_code=` is read and upper-cased (codes mint uppercase; a lowercased URL used to fall through the case-sensitive JS selector and silently show the full list).
+2. The `tl_class` post is resolved by `lxp_class_code`.
+3. **Membership is re-asserted** against that class's own `lxp_student_ids` — the same check `Rest_Lxp_Student::access_login()` makes. A code on its own never grants a view; classmates share codes, and `/lms/v1/class/by-code` is `__return_true`.
+4. With no `class_code` in the URL, it falls back to the student's class **only if they are in exactly one** — still a single-class view, and it keeps a bookmarked URL working. Zero or more than one renders the empty state.
+
+Anything else renders the empty-state message, never a list. `back_label` is retired; `empty_message` now reads as "use the link your teacher gave you".
 
 ### The ticket screen, and the bookmark hand-off
 
@@ -210,12 +241,19 @@ Toggle: **Admin → Schools → edit → Student privacy** checkbox (`admin-scho
 |---|---|
 | Join form (student) | [lxp-class-join-widget.php](../includes/widgets/lxp-class-join-widget.php) — Elementor `lxp-class-join` |
 | Bookmark prompt (student) | [lxp-bookmark-prompt-widget.php](../includes/widgets/lxp-bookmark-prompt-widget.php) — Elementor `lxp-bookmark-prompt` |
+| Course list (student) | [lxp-student-courses-widget.php](../includes/widgets/lxp-student-courses-widget.php) — Elementor `lxp-student-courses`, single-class (§6) |
 | Roster + claim links (teacher) | [class-roster-modal.php](../lms/templates/tinyLxpTheme/lxp/class-roster-modal.php) |
-| Code controls | `teacher-class-modal.php`, `admin-class-modal.php` |
+| Code controls | `teacher-class-modal.php`, `admin-class-modal.php` — now the **left** column, where Schedule used to be |
 | Seats badge + Roster button | `teacher-classes.php`, `admin-classes.php` |
 | Token-mode toggle | `admin-school-modal.php`, `admin-schools.php` |
 
-**The join widget contains no name, email, DOB or password input anywhere in its markup.** That absence is the form-level enforcement the spec requires — it is not a validation rule that can be bypassed. It also handles `?claim=` (resume) and `?class_code=` (deep link) from the URL.
+The class modal has lost its Grade select, its Students picker and its Class/Group type radios. Grades are inherited from the teacher (`lxp_class_grades`), students arrive by redemption or the Roster modal, and `type` is posted as a fixed hidden `classes`. Registration Code moved into the left column and Schedule became an optional collapsed section on the right — the code is what teachers actually hand out.
+
+**The join widget contains no email, DOB or password input anywhere in its markup** — those absences are still structural, and cannot be bypassed by a crafted request because nothing downstream reads such a field.
+
+It *does* contain one free-text input: the nickname. That is the one thing the spec originally forbade, and it is there deliberately (see §3b). Whatever the student types is validated by `ALIAS_PATTERN` + `looks_like_pii()` and then stored as their display name. **Do not reword the field's label to invite a real name** — the Elementor control carries a note saying so, because that wording is now doing privacy work.
+
+The widget also handles `?claim=` (resume) and `?class_code=` (deep link) from the URL, and on a complete code confirms the class title before the student types.
 
 Claim links can only be printed in the session they were minted, since the server holds hashes.
 
@@ -256,7 +294,7 @@ Claim links can only be printed in the session they were minted, since the serve
 3. Claim links are unrecoverable by design. "Print claim slips" only prints links minted in the current modal session.
 4. `lxp/functions.php` is **not** loaded in REST context — REST callbacks must use `TL_Class_Member_Repository` directly rather than `lxp_get_class_seats_taken()`.
 5. Seat labels auto-grow only for unlimited-seat classes. A capped class that runs out returns `class_full`; raise `lxp_class_max_seats` (which re-syncs the pool) rather than editing labels.
-6. `alias_mode = open` still allows a determined student to type something name-like. Only `assigned` is structurally safe — keep it as the default.
+6. **A student can type something name-like, and nothing structural stops them.** `assigned` mode — the dropdown that made this impossible — was removed at the client's request; every class is now nickname-typed. `looks_like_pii()` catches email- and phone-shaped values only. See §3b before making any claim about what the server does and does not hold.
 7. **Seat-count race:** two students submitting simultaneously against the last seat can over-fill a class by one. The `UNIQUE (class_id, alias_label)` index closes the *alias* race hard, so nobody ever shares a seat label; only the count can drift, and only by one. Accepted rather than serialised behind a lock — over-enrolling one student is far less damaging than blocking a whole class on a lock timeout.
 8. Class membership lives in **two** places (`lxp_student_ids` meta + `lxp_class_members`) and that is deliberate, not redundancy — see §4. Any code that rewrites `lxp_student_ids` wholesale must call `Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` afterwards.
 9. Rate limiting uses two separate counters: `write` (redeem/claim, 10 per 10 min) and `lookup` (seat reads, 60 per 10 min). The join form calls the lookup as the student types, so it must never consume the write budget — and the widget also dedupes repeat lookups of the same code.

@@ -227,10 +227,15 @@ class Rest_Lxp_Class_Redemption {
 	}
 
 	/**
-	 * Alias labels still available on a class, for the join form's dropdown.
+	 * Look a class code up so the join form can confirm it before submitting.
 	 *
-	 * Public because the join form is unauthenticated, but it discloses only
-	 * non-PII seat labels for a class whose code the caller already holds.
+	 * Named for what it used to return — a list of free seat labels for a
+	 * dropdown. That dropdown is gone (students type a nickname), so this now
+	 * answers only "which class is this, and is it full?". The route stays
+	 * `/class/seats` because renaming a published endpoint buys nothing.
+	 *
+	 * Public because the join form is unauthenticated. It discloses only a class
+	 * title and a seat count, to a caller who already holds that class's code.
 	 */
 	public static function get_open_seats( $request ) {
 		$code = strtoupper( sanitize_text_field( (string) $request->get_param( 'class_code' ) ) );
@@ -244,22 +249,15 @@ class Rest_Lxp_Class_Redemption {
 			return self::reject( $class );
 		}
 
-		$class_id   = (int) $class->ID;
-		$alias_mode = self::get_alias_mode( $class_id );
-		$max_seats  = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
-		$taken      = self::members()->count_active( $class_id );
+		$class_id  = (int) $class->ID;
+		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
+		$taken     = self::members()->count_active( $class_id );
 
-		$open = array();
-		if ( 'assigned' === $alias_mode ) {
-			$pool  = self::get_seat_pool( $class_id );
-			$used  = self::members()->get_taken_aliases( $class_id );
-			$open  = array_values( array_diff( $pool, $used ) );
-		}
-
+		// No seat list any more — students type a nickname. What the join form
+		// still needs is confirmation of *which* class a code belongs to, and
+		// whether it is full, before the student bothers typing.
 		return wp_send_json_success( array(
 			'class_name'  => $class->post_title,
-			'alias_mode'  => $alias_mode,
-			'open_seats'  => $open,
 			'seats_taken' => $taken,
 			'max_seats'   => $max_seats,
 			'is_full'     => ( $max_seats > 0 && $taken >= $max_seats ),
@@ -295,11 +293,6 @@ class Rest_Lxp_Class_Redemption {
 			update_post_meta( $class_id, 'lxp_class_code_revoked', $revoked ? '1' : '' );
 		}
 
-		if ( null !== $request->get_param( 'alias_mode' ) ) {
-			$mode = 'open' === $request->get_param( 'alias_mode' ) ? 'open' : 'assigned';
-			update_post_meta( $class_id, 'lxp_class_alias_mode', $mode );
-		}
-
 		if ( filter_var( $request->get_param( 'regenerate_code' ), FILTER_VALIDATE_BOOLEAN ) ) {
 			update_post_meta( $class_id, 'lxp_class_code', self::generate_class_code() );
 		}
@@ -312,7 +305,6 @@ class Rest_Lxp_Class_Redemption {
 			'max_seats'   => (int) get_post_meta( $class_id, 'lxp_class_max_seats', true ),
 			'expires'     => get_post_meta( $class_id, 'lxp_class_code_expires', true ),
 			'revoked'     => (bool) get_post_meta( $class_id, 'lxp_class_code_revoked', true ),
-			'alias_mode'  => self::get_alias_mode( $class_id ),
 			'seats_taken' => self::members()->count_active( $class_id ),
 		) );
 	}
@@ -704,10 +696,22 @@ class Rest_Lxp_Class_Redemption {
 	/**
 	 * Validate/normalise the submitted alias for a class.
 	 *
-	 * In `assigned` mode (the default) the alias must be an unclaimed label from
-	 * the teacher's seat pool — there is no free-text path, so a real name
-	 * cannot be submitted at all. In `open` mode the alias is charset-checked
-	 * and collisions are disambiguated with a numeric suffix.
+	 * Every class works the same way: the student types a nickname, which is
+	 * charset-checked, screened by looks_like_pii(), and disambiguated with a
+	 * numeric suffix on collision.
+	 *
+	 * There used to be a second `assigned` mode where the student picked an
+	 * unclaimed label from a dropdown instead. It is gone at the client's
+	 * request, and the branch had to go with it rather than merely being hidden
+	 * in the UI — classes created before the change still carry
+	 * `lxp_class_alias_mode = 'assigned'` in post meta, and a typed nickname
+	 * would have been rejected as `bad_alias` for not being in the seat pool.
+	 *
+	 * Note this is *not* the same thing as the seat pool itself
+	 * (`get_seat_pool()` / `lxp_class_seat_labels`), which is still very much
+	 * alive: it belongs to the Roster modal and CSV import, where the teacher
+	 * pre-creates seats and hands out claim links. That flow never comes
+	 * through here.
 	 *
 	 * @param  int    $class_id
 	 * @param  string $alias
@@ -720,18 +724,6 @@ class Rest_Lxp_Class_Redemption {
 			return 'ERR:bad_alias';
 		}
 
-		if ( 'assigned' === self::get_alias_mode( $class_id ) ) {
-			$pool = self::get_seat_pool( $class_id );
-			if ( ! in_array( $alias, $pool, true ) ) {
-				return 'ERR:bad_alias';
-			}
-			if ( self::members()->get_by_alias( $class_id, $alias ) ) {
-				return 'ERR:seat_taken';
-			}
-			return $alias;
-		}
-
-		// Open mode.
 		if ( ! preg_match( self::ALIAS_PATTERN, $alias ) || self::looks_like_pii( $alias ) ) {
 			return 'ERR:bad_alias';
 		}
@@ -863,15 +855,6 @@ class Rest_Lxp_Class_Redemption {
 		return array_slice( $open, 0, $count );
 	}
 
-	/**
-	 * @param  int $class_id
-	 * @return string 'assigned' | 'open'
-	 */
-	private static function get_alias_mode( $class_id ) {
-		$mode = get_post_meta( $class_id, 'lxp_class_alias_mode', true );
-		return 'open' === $mode ? 'open' : 'assigned';
-	}
-
 	// =========================================================================
 	// Anti-abuse, auth, audit
 	// =========================================================================
@@ -993,21 +976,39 @@ class Rest_Lxp_Class_Redemption {
 	// =========================================================================
 
 	/**
-	 * Uniform failure response.
+	 * Failure response.
 	 *
-	 * The client always sees the same generic message so failures cannot be
-	 * told apart; the specific reason is returned as a machine code for logging
-	 * and is surfaced to teachers, not to guessers.
+	 * Reasons that concern **the code itself** all share one generic message, so
+	 * a guesser cannot tell "no such code" from "revoked" from "expired" — that
+	 * indistinguishability is the point and must not be optimised away for
+	 * friendlier copy. The specific reason still travels as a machine `code`
+	 * for logging.
+	 *
+	 * Reasons that concern what the student typed, or the state of a class they
+	 * demonstrably already have the code for, leak nothing and so say what is
+	 * actually wrong. Without this a rejected nickname reported "That class code
+	 * could not be used", sending the student to fix the one field that was fine.
 	 *
 	 * @param  string $reason
 	 */
 	private static function reject( $reason ) {
 		$status = 'rate_limited' === $reason ? 429 : 400;
 
+		$specific = array(
+			'bad_alias'    => __( 'Please pick a different nickname — 2 to 32 letters or numbers, and no email addresses or phone numbers.', 'tinylxp' ),
+			'seat_taken'   => __( 'Somebody just took that spot. Please try another nickname.', 'tinylxp' ),
+			'class_full'   => __( 'This class is full. Please check with your teacher.', 'tinylxp' ),
+			'rate_limited' => __( 'Too many tries. Please wait a few minutes and try again.', 'tinylxp' ),
+		);
+
+		$message = isset( $specific[ $reason ] )
+			? $specific[ $reason ]
+			: __( 'That class code could not be used. Please check it with your teacher.', 'tinylxp' );
+
 		return wp_send_json_error(
 			array(
 				'code'    => $reason,
-				'message' => __( 'That class code could not be used. Please check it with your teacher.', 'tinylxp' ),
+				'message' => $message,
 			),
 			$status
 		);

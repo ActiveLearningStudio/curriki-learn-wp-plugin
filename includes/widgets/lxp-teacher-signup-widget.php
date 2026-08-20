@@ -1,0 +1,378 @@
+<?php
+/**
+ * LXP Teacher Signup — public self-registration for teachers.
+ *
+ * Collects name, email, password and the grades taught, then hands off to
+ * POST /lms/v1/teacher/signup, which creates the account, attaches it to the
+ * school an administrator configured under Curriki Learn -> Teacher Signup,
+ * signs the teacher in, and returns where to go next (/classes).
+ *
+ * The form deliberately has no school or district field. Placement is decided
+ * server-side from a WP option — a public form that lets the caller name their
+ * own school lets anyone join any school.
+ *
+ * @see lms/lms-rest-apis/teacher-signup.php
+ */
+
+namespace Edudeme\Elementor;
+
+use Elementor\Controls_Manager;
+
+class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
+
+	public function get_name()       { return 'lxp-teacher-signup'; }
+	public function get_title()      { return esc_html__( 'LXP Teacher Signup', 'tinylxp' ); }
+	public function get_icon()       { return 'eicon-form-horizontal'; }
+	public function get_categories() { return [ 'general' ]; }
+
+	protected function register_controls() {
+
+		// ── Content ───────────────────────────────────────────────────────
+		$this->start_controls_section( 'section_content', [
+			'label' => esc_html__( 'Content', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_CONTENT,
+		] );
+
+		$this->add_control( 'heading', [
+			'label'   => esc_html__( 'Heading', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Create your teacher account', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'intro', [
+			'label'   => esc_html__( 'Intro Text', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXTAREA,
+			'default' => esc_html__( 'Set up your account to start creating classes and enrolling students.', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'grades_label', [
+			'label'   => esc_html__( 'Grades Field Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Grades you teach', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'button_label', [
+			'label'   => esc_html__( 'Button Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'Create my account', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'signed_in_text', [
+			'label'   => esc_html__( 'Already Signed In Message', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => esc_html__( 'You are already signed in.', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'school_help', [
+			'type'            => Controls_Manager::RAW_HTML,
+			'raw'             => esc_html__( 'New teachers are attached to the school selected under Curriki Learn → Teacher Signup in wp-admin. Set that first — signup is refused until a school is chosen, and until that school has a district assigned.', 'tinylxp' ),
+			'content_classes' => 'elementor-panel-alert elementor-panel-alert-warning',
+		] );
+
+		$this->end_controls_section();
+
+		// ── Style ─────────────────────────────────────────────────────────
+		$this->start_controls_section( 'section_style', [
+			'label' => esc_html__( 'Style', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'bg_color', [
+			'label'   => esc_html__( 'Background', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#ffffff',
+		] );
+
+		$this->add_control( 'text_color', [
+			'label'   => esc_html__( 'Text Color', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#3c4043',
+		] );
+
+		$this->add_control( 'btn_bg_color', [
+			'label'   => esc_html__( 'Button Background', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#1a73e8',
+		] );
+
+		$this->add_control( 'btn_text_color', [
+			'label'   => esc_html__( 'Button Text', 'tinylxp' ),
+			'type'    => Controls_Manager::COLOR,
+			'default' => '#ffffff',
+		] );
+
+		$this->add_control( 'max_width', [
+			'label'      => esc_html__( 'Max Width', 'tinylxp' ),
+			'type'       => Controls_Manager::SLIDER,
+			'size_units' => [ 'px', '%' ],
+			'range'      => [ 'px' => [ 'min' => 280, 'max' => 1200 ] ],
+			'default'    => [ 'unit' => 'px', 'size' => 520 ],
+		] );
+
+		$this->end_controls_section();
+	}
+
+	protected function render() {
+		$settings = $this->get_settings_for_display();
+		$is_edit  = \Elementor\Plugin::$instance->editor->is_edit_mode();
+
+		// A signed-in visitor has nothing to sign up for. Still render the form
+		// in the editor, otherwise it cannot be selected while being styled.
+		if ( is_user_logged_in() && ! $is_edit ) {
+			printf(
+				'<p>%s <a href="%s">%s</a></p>',
+				esc_html( $settings['signed_in_text'] ),
+				esc_url( home_url( '/classes/' ) ),
+				esc_html__( 'Go to my classes', 'tinylxp' )
+			);
+			return;
+		}
+
+		$uid          = 'lxp-tsu-' . $this->get_id();
+		$heading      = esc_html( $settings['heading'] );
+		$intro        = esc_html( $settings['intro'] );
+		$grades_label = esc_html( $settings['grades_label'] );
+		$button_label = esc_html( $settings['button_label'] );
+
+		$bg       = esc_attr( $settings['bg_color'] );
+		$text_col = esc_attr( $settings['text_color'] );
+		$btn_bg   = esc_attr( $settings['btn_bg_color'] );
+		$btn_text = esc_attr( $settings['btn_text_color'] );
+
+		$width      = isset( $settings['max_width']['size'] ) ? $settings['max_width']['size'] : 520;
+		$width_unit = isset( $settings['max_width']['unit'] ) ? $settings['max_width']['unit'] : 'px';
+		$max_width  = esc_attr( $width . $width_unit );
+
+		$grades = function_exists( 'lxp_get_grade_options' ) ? lxp_get_grade_options() : [];
+
+		$signup_url = rest_url( 'lms/v1/teacher/signup' );
+
+		// The endpoint checks is_user_logged_in() inside its callback. Without
+		// this header WP core silently demotes a cookie-authenticated request to
+		// anonymous instead of erroring — see CLAUDE.md gotcha #16.
+		$nonce = wp_create_nonce( 'wp_rest' );
+		?>
+		<style>
+		#<?php echo esc_attr( $uid ); ?> {
+			max-width: <?php echo $max_width; ?>;
+			margin: 0 auto;
+			padding: 24px;
+			background: <?php echo $bg; ?>;
+			color: <?php echo $text_col; ?>;
+			border-radius: 8px;
+			font-family: 'Google Sans', Roboto, Arial, sans-serif;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-heading {
+			font-size: 22px;
+			font-weight: 500;
+			margin-bottom: 6px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-intro {
+			font-size: 14px;
+			line-height: 1.5;
+			margin-bottom: 20px;
+			opacity: .85;
+		}
+		#<?php echo esc_attr( $uid ); ?> label {
+			display: block;
+			font-size: 13px;
+			font-weight: 500;
+			margin-bottom: 4px;
+		}
+		#<?php echo esc_attr( $uid ); ?> input[type="text"],
+		#<?php echo esc_attr( $uid ); ?> input[type="email"],
+		#<?php echo esc_attr( $uid ); ?> input[type="password"] {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 9px 12px;
+			font-size: 15px;
+			border: 1px solid #dadce0;
+			border-radius: 6px;
+			margin-bottom: 14px;
+			background: #fff;
+			color: #3c4043;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-row {
+			display: flex;
+			gap: 12px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-row > div {
+			flex: 1;
+		}
+		@media (max-width: 480px) {
+			#<?php echo esc_attr( $uid ); ?> .lxp-tsu-row { display: block; }
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-grades {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px 14px;
+			margin-bottom: 18px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-grades label {
+			font-weight: 400;
+			font-size: 14px;
+			margin: 0;
+			display: inline-flex;
+			align-items: center;
+			gap: 5px;
+			cursor: pointer;
+		}
+		#<?php echo esc_attr( $uid ); ?> button.lxp-tsu-btn {
+			width: 100%;
+			padding: 11px 16px;
+			font-size: 15px;
+			font-weight: 500;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			background: <?php echo $btn_bg; ?>;
+			color: <?php echo $btn_text; ?>;
+		}
+		#<?php echo esc_attr( $uid ); ?> button.lxp-tsu-btn[disabled] {
+			opacity: .6;
+			cursor: default;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-msg {
+			font-size: 14px;
+			line-height: 1.4;
+			min-height: 20px;
+			margin-top: 12px;
+			color: #d93025;
+		}
+		</style>
+
+		<div id="<?php echo esc_attr( $uid ); ?>">
+			<form class="lxp-tsu-form" autocomplete="off">
+				<?php if ( $heading ) : ?>
+				<div class="lxp-tsu-heading"><?php echo $heading; ?></div>
+				<?php endif; ?>
+
+				<?php if ( $intro ) : ?>
+				<div class="lxp-tsu-intro"><?php echo $intro; ?></div>
+				<?php endif; ?>
+
+				<div class="lxp-tsu-row">
+					<div>
+						<label for="<?php echo esc_attr( $uid ); ?>-first"><?php esc_html_e( 'First name', 'tinylxp' ); ?></label>
+						<input type="text" id="<?php echo esc_attr( $uid ); ?>-first" class="lxp-tsu-first" required autocomplete="given-name" />
+					</div>
+					<div>
+						<label for="<?php echo esc_attr( $uid ); ?>-last"><?php esc_html_e( 'Last name', 'tinylxp' ); ?></label>
+						<input type="text" id="<?php echo esc_attr( $uid ); ?>-last" class="lxp-tsu-last" required autocomplete="family-name" />
+					</div>
+				</div>
+
+				<label for="<?php echo esc_attr( $uid ); ?>-email"><?php esc_html_e( 'Email', 'tinylxp' ); ?></label>
+				<input type="email" id="<?php echo esc_attr( $uid ); ?>-email" class="lxp-tsu-email" required autocomplete="email" />
+
+				<div class="lxp-tsu-row">
+					<div>
+						<label for="<?php echo esc_attr( $uid ); ?>-pass"><?php esc_html_e( 'Password', 'tinylxp' ); ?></label>
+						<input type="password" id="<?php echo esc_attr( $uid ); ?>-pass" class="lxp-tsu-pass" required minlength="8" autocomplete="new-password" />
+					</div>
+					<div>
+						<label for="<?php echo esc_attr( $uid ); ?>-pass2"><?php esc_html_e( 'Confirm password', 'tinylxp' ); ?></label>
+						<input type="password" id="<?php echo esc_attr( $uid ); ?>-pass2" class="lxp-tsu-pass2" required minlength="8" autocomplete="new-password" />
+					</div>
+				</div>
+
+				<label><?php echo $grades_label; ?></label>
+				<div class="lxp-tsu-grades">
+					<?php foreach ( $grades as $grade ) : ?>
+						<label>
+							<input type="checkbox" class="lxp-tsu-grade" value="<?php echo esc_attr( $grade ); ?>" />
+							<?php echo esc_html( $grade ); ?>
+						</label>
+					<?php endforeach; ?>
+				</div>
+
+				<button type="submit" class="lxp-tsu-btn"><?php echo $button_label; ?></button>
+				<div class="lxp-tsu-msg" aria-live="polite"></div>
+			</form>
+		</div>
+
+		<script>
+		(function() {
+			var root = document.getElementById(<?php echo wp_json_encode( $uid ); ?>);
+			if (!root) return;
+
+			var form  = root.querySelector('.lxp-tsu-form');
+			var btn   = root.querySelector('.lxp-tsu-btn');
+			var msg   = root.querySelector('.lxp-tsu-msg');
+
+			var signupUrl = <?php echo wp_json_encode( $signup_url ); ?>;
+			var restNonce = <?php echo wp_json_encode( $nonce ); ?>;
+
+			function fail(text) {
+				msg.style.color = '#d93025';
+				msg.textContent = text || 'Something went wrong. Please try again.';
+				btn.removeAttribute('disabled');
+			}
+
+			function errorText(r) {
+				var d = r.json && r.json.data;
+				if (typeof d === 'string') { return d; }
+				if (d && typeof d.message === 'string') { return d.message; }
+				return 'We could not create your account. Please try again.';
+			}
+
+			form.addEventListener('submit', function(e) {
+				e.preventDefault();
+
+				var pass  = root.querySelector('.lxp-tsu-pass').value;
+				var pass2 = root.querySelector('.lxp-tsu-pass2').value;
+
+				// Mirror of the server checks, purely so the teacher gets an
+				// instant answer. The endpoint re-validates everything.
+				if (pass.length < 8) {
+					fail('Please choose a password of at least 8 characters.');
+					return;
+				}
+				if (pass !== pass2) {
+					fail('The two passwords do not match.');
+					return;
+				}
+
+				var grades = Array.prototype.slice
+					.call(root.querySelectorAll('.lxp-tsu-grade:checked'))
+					.map(function(cb) { return cb.value; });
+
+				if (!grades.length) {
+					fail('Please choose at least one grade you teach.');
+					return;
+				}
+
+				btn.setAttribute('disabled', 'disabled');
+				msg.style.color = '#5f6368';
+				msg.textContent = 'Creating your account…';
+
+				var body = new FormData();
+				body.append('lxp_first_name', root.querySelector('.lxp-tsu-first').value);
+				body.append('lxp_last_name', root.querySelector('.lxp-tsu-last').value);
+				body.append('lxp_user_email', root.querySelector('.lxp-tsu-email').value);
+				body.append('lxp_user_password', pass);
+				body.append('lxp_user_password_confirm', pass2);
+				grades.forEach(function(g) { body.append('grades[]', g); });
+
+				fetch(signupUrl, {
+					method: 'POST',
+					body: body,
+					credentials: 'same-origin',
+					headers: { 'X-WP-Nonce': restNonce }
+				}).then(function(res) {
+					return res.json().then(function(j) { return { ok: res.ok, json: j }; });
+				}).then(function(r) {
+					if (r.ok && r.json && r.json.success) {
+						window.location.href = r.json.data.redirect_url;
+					} else {
+						fail(errorText(r));
+					}
+				}).catch(function() {
+					fail();
+				});
+			});
+		})();
+		</script>
+		<?php
+	}
+}
