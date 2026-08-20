@@ -74,16 +74,6 @@
             gap: 16px;
         }
 
-        .heading-right .lxp-logout-link {
-            font-size: 13px;
-            color: #5f6368;
-            text-decoration: none;
-        }
-
-        .heading-right .lxp-logout-link:hover {
-            text-decoration: underline;
-        }
-
         .students-table .table tbody tr td .dropdown .dropdown-menu.show {
             width: 200px;
         }
@@ -93,12 +83,35 @@
 <body>
 
     <!--
-        Neither the top navbar nor the section nav row is rendered here, on
-        purpose. The product this page belongs to is Classes only — every other
-        destination those navs pointed at (Dashboard, Courses, Students,
-        Assignments, Calendar, Groups) is not on offer. Logout moved into the
-        heading row below, since the avatar menu was the only place it lived.
+        Same header section as the dashboard, minus the search input — Classes
+        has nothing to search from here. The site logo is the reason this exists;
+        the avatar block comes with it, and that is where Logout lives, so the
+        heading row below deliberately has no logout link of its own.
+
+        The left `.nav-section` sidebar is still NOT rendered. The product this
+        page belongs to is Classes only, and every destination that sidebar
+        pointed at (Courses, Students, Assignments, Calendar, Groups) is not on
+        offer.
     -->
+    <nav class="navbar navbar-expand-lg bg-light">
+        <div class="container-fluid">
+            <?php include $livePath.'/trek/header-logo.php'; ?>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <!-- Empty spacer: me-auto is what pushes the avatar block right,
+                     and it used to be the search box doing that job. -->
+                <div class="navbar-nav me-auto mb-2 mb-lg-0"></div>
+                <div class="d-flex">
+                    <div class="header-notification-user">
+                        <?php include $livePath.'/trek/user-profile-block.php'; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
 
     <!-- Welcome: section-->
     <section class="welcome-section">
@@ -112,7 +125,6 @@
             </div>
 
             <div class="heading-right">
-                <a class="lxp-logout-link" href="<?php echo esc_url(wp_logout_url(site_url('login'))); ?>">Log out</a>
                 <button id="classModalBtn" class="add-heading primary-btn" type="button" data-bs-toggle="modal" data-bs-target="#classModal">
                     Add New Class
                 </button>
