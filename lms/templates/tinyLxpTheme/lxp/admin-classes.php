@@ -289,7 +289,7 @@ $edlink_options = get_option('edlink_options');
                                 <?php
                                     foreach ($classes as $class) {
                                         $lxp_class_code = get_post_meta($class->ID, 'lxp_class_code', true);
-                                        $lxp_seats_max  = (int) get_post_meta($class->ID, 'lxp_class_max_seats', true);
+                                        $lxp_seats_max  = lxp_get_class_max_seats($class->ID);
                                         $lxp_seats_used = lxp_get_class_seats_taken($class->ID);
                                 ?>
                                     <tr>
@@ -329,7 +329,7 @@ $edlink_options = get_option('edlink_options');
                                         </td>
                                         <td style="white-space:nowrap">
                                             <span class="lxp-seat-badge" style="background:#e8f0fe;color:#1967d2;padding:2px 8px;border-radius:10px;font-size:12px">
-                                                <?php echo esc_html($lxp_seats_used); ?> / <?php echo $lxp_seats_max > 0 ? esc_html($lxp_seats_max) : '&infin;'; ?>
+                                                <?php echo esc_html($lxp_seats_used); ?> / <?php echo esc_html($lxp_seats_max); ?>
                                             </span>
                                             <button class="lxp-view-roster" data-class-id="<?php echo esc_attr($class->ID); ?>" data-class-name="<?php echo esc_attr($class->post_title); ?>" title="View roster &amp; claim links" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px">&#128203;</button>
                                         </td>

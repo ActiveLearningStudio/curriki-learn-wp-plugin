@@ -134,6 +134,8 @@ For each, confirm: no new user, no new `tl_student` post, no new `lxp_class_memb
 - [ ] Duplicate nickname — two students typing the same thing. The second must become `<nickname> 2`, **not** an error, and must be a separate account
 - [ ] Rate limit (>10 redeem/claim attempts in <10 min from one IP — the 11th should fail)
 - [ ] **Legacy class regression:** pick a class created before nickname-only joining (`SELECT post_id FROM wp_postmeta WHERE meta_key='lxp_class_alias_mode' AND meta_value='assigned'`). A typed nickname must be **accepted**. If it comes back rejected, `resolve_alias()` is still branching on the old meta.
+- [ ] **Seat cap regression:** pick a class created before the 150-seat cap (`SELECT post_id FROM wp_postmeta WHERE meta_key='lxp_class_max_seats' AND meta_value='0'`). It must behave as a **150**-seat class, not an unlimited one — the class list shows `N / 150`, not `N / ∞`, and the modal rehydrates `Max Seats` as `150`. If anything still shows `0` or `∞`, a `get_post_meta()` call bypassed `lxp_get_class_max_seats()`.
+- [ ] **Cap cannot be exceeded:** POST `lxp_class_max_seats=9999` straight to `/lms/v1/classes/save` (bypassing the modal's `max=` attribute). Re-read the class — it must store `150`.
 
 > Each rejection must leave **no** WP user, **no** `tl_student` post and **no** `lxp_class_members` row, and must not consume a seat.
 >

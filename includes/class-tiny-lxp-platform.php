@@ -132,7 +132,14 @@ class Tiny_LXP_Platform
         require_once plugin_dir_path(dirname(__FILE__)) . 'vendor/autoload.php';
 
         require_once plugin_dir_path(dirname(__FILE__)) . 'tiny-lxp-resource/load.php';
-        
+
+        /**
+         * Teacher front-end lockdown. Self-registers its hooks rather than going
+         * through the loader — see the file header for why an access control must
+         * not sit behind the isOK() dependency gate.
+         */
+        require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-tiny-lxp-teacher-access.php';
+
         /**
          * The class responsible for orchestrating the actions and filters of the
          * core plugin.

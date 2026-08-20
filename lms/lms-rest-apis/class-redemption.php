@@ -158,10 +158,11 @@ class Rest_Lxp_Class_Redemption {
 
 		$class_id = (int) $class->ID;
 
-		// 5. Seats.
-		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
+		// 5. Seats. Every class has a cap now — see lxp_get_class_max_seats(),
+		// which also resolves the legacy 0-means-unlimited value.
+		$max_seats = lxp_get_class_max_seats( $class_id );
 		$taken     = self::members()->count_active( $class_id );
-		if ( $max_seats > 0 && $taken >= $max_seats ) {
+		if ( $taken >= $max_seats ) {
 			return self::reject( 'class_full' );
 		}
 
@@ -250,7 +251,7 @@ class Rest_Lxp_Class_Redemption {
 		}
 
 		$class_id  = (int) $class->ID;
-		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
+		$max_seats = lxp_get_class_max_seats( $class_id );
 		$taken     = self::members()->count_active( $class_id );
 
 		// No seat list any more — students type a nickname. What the join form
@@ -260,7 +261,7 @@ class Rest_Lxp_Class_Redemption {
 			'class_name'  => $class->post_title,
 			'seats_taken' => $taken,
 			'max_seats'   => $max_seats,
-			'is_full'     => ( $max_seats > 0 && $taken >= $max_seats ),
+			'is_full'     => ( $taken >= $max_seats ),
 		) );
 	}
 
@@ -280,7 +281,7 @@ class Rest_Lxp_Class_Redemption {
 		}
 
 		if ( null !== $request->get_param( 'max_seats' ) ) {
-			update_post_meta( $class_id, 'lxp_class_max_seats', absint( $request->get_param( 'max_seats' ) ) );
+			update_post_meta( $class_id, 'lxp_class_max_seats', lxp_clamp_class_max_seats( $request->get_param( 'max_seats' ) ) );
 		}
 
 		if ( null !== $request->get_param( 'code_expires' ) ) {
@@ -302,7 +303,7 @@ class Rest_Lxp_Class_Redemption {
 
 		return wp_send_json_success( array(
 			'class_code'  => get_post_meta( $class_id, 'lxp_class_code', true ),
-			'max_seats'   => (int) get_post_meta( $class_id, 'lxp_class_max_seats', true ),
+			'max_seats'   => lxp_get_class_max_seats( $class_id ),
 			'expires'     => get_post_meta( $class_id, 'lxp_class_code_expires', true ),
 			'revoked'     => (bool) get_post_meta( $class_id, 'lxp_class_code_revoked', true ),
 			'seats_taken' => self::members()->count_active( $class_id ),
@@ -337,7 +338,7 @@ class Rest_Lxp_Class_Redemption {
 			);
 		}
 
-		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
+		$max_seats = lxp_get_class_max_seats( $class_id );
 
 		return wp_send_json_success( array(
 			'roster'      => $roster,
@@ -370,11 +371,11 @@ class Rest_Lxp_Class_Redemption {
 			// No explicit labels: take the next N unclaimed labels from the pool.
 			$aliases = self::next_open_seats( $class_id, $seat_count );
 			if ( empty( $aliases ) ) {
-				return wp_send_json_error( 'No seat labels are available. Raise the seat cap first.', 400 );
+				return wp_send_json_error( 'No seat labels are available — this class is at its seat cap.', 400 );
 			}
 		}
 
-		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
+		$max_seats = lxp_get_class_max_seats( $class_id );
 		$taken     = self::members()->count_active( $class_id );
 
 		$created = array();
@@ -383,7 +384,7 @@ class Rest_Lxp_Class_Redemption {
 		foreach ( $aliases as $raw_alias ) {
 			$alias = sanitize_text_field( (string) $raw_alias );
 
-			if ( $max_seats > 0 && ( $taken + count( $created ) ) >= $max_seats ) {
+			if ( ( $taken + count( $created ) ) >= $max_seats ) {
 				$skipped[] = array( 'alias' => $alias, 'reason' => 'class_full' );
 				continue;
 			}
@@ -794,11 +795,13 @@ class Rest_Lxp_Class_Redemption {
 	 * @return string[] The resulting pool.
 	 */
 	private static function sync_seat_pool( $class_id ) {
-		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
+		$max_seats = lxp_get_class_max_seats( $class_id );
 		$taken     = self::members()->get_taken_aliases( $class_id );
 
-		// Unlimited seats: keep whatever exists, topped up to cover current use.
-		$target = $max_seats > 0 ? $max_seats : max( count( $taken ) + 10, 30 );
+		// Materialise a working head of the pool rather than all 150 labels —
+		// that would be 150 postmeta rows per class for seats most classes never
+		// use. next_open_seats() grows it on demand, bounded by the same cap.
+		$target = min( $max_seats, max( count( $taken ) + 10, 30 ) );
 
 		$pool = array();
 		for ( $i = 1; $i <= $target; $i++ ) {
@@ -837,19 +840,19 @@ class Rest_Lxp_Class_Redemption {
 		$taken = self::members()->get_taken_aliases( $class_id );
 		$open  = array_values( array_diff( $pool, $taken ) );
 
-		// Unlimited-seat classes should never be blocked by a short pool.
-		$max_seats = (int) get_post_meta( $class_id, 'lxp_class_max_seats', true );
-		if ( count( $open ) < $count && 0 === $max_seats ) {
-			$next = count( $pool ) + 1;
-			while ( count( $open ) < $count ) {
-				$label = sprintf( 'Student %02d', $next );
-				if ( ! in_array( $label, $pool, true ) ) {
-					add_post_meta( $class_id, 'lxp_class_seat_labels', $label );
-					$pool[] = $label;
-					$open[] = $label;
-				}
-				$next++;
+		// Grow the pool on demand so a short pool never blocks a class that still
+		// has room — but never past the seat cap. The loop terminates either way:
+		// $next always advances, and the pool is bounded by $max_seats.
+		$max_seats = lxp_get_class_max_seats( $class_id );
+		$next      = count( $pool ) + 1;
+		while ( count( $open ) < $count && count( $pool ) < $max_seats ) {
+			$label = sprintf( 'Student %02d', $next );
+			if ( ! in_array( $label, $pool, true ) ) {
+				add_post_meta( $class_id, 'lxp_class_seat_labels', $label );
+				$pool[] = $label;
+				$open[] = $label;
 			}
+			$next++;
 		}
 
 		return array_slice( $open, 0, $count );
