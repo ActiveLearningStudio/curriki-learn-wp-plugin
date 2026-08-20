@@ -69,7 +69,7 @@ At the client's request, `assigned` was removed. Every class is now nickname-typ
 
 So the enforcement today is two weaker things:
 
-1. **Framing.** The field is labelled and placeholdered "Choose a nickname", and the Elementor control carries a note telling authors not to reword it into "Your name". This is a nudge, not a control.
+1. **Framing.** The field is labelled and placeholdered "Choose a Name", and the Elementor control carries a note telling authors not to reword it into "Your name". This is a nudge, not a control.
 2. **`Rest_Lxp_Class_Redemption::looks_like_pii()`** — rejects email-shaped values (`@`) and phone-shaped ones (≥7 digits after stripping separators), plus the `ALIAS_PATTERN` charset/length limit. Mirrored client-side in the join widget for fast feedback; the server remains the authority.
 
 **No regex can reject "Maria Garcia" while accepting "Student Fourteen."** A student who types their real first name will have it stored as their `display_name` and `tl_student` post title. That is a known, accepted consequence of the product decision — not an oversight — but it means the "server never holds student PII" claim is now a matter of student behaviour, not of system design. Anyone reasoning about the COPPA/FERPA posture needs to know that.
@@ -84,7 +84,7 @@ Zone B (the encrypted roster vault) is unaffected: it still holds the teacher's 
 
 | Key | Value |
 |---|---|
-| `lxp_class_max_seats` | int; `0` = unlimited |
+| `lxp_class_max_seats` | int, 1–`TL_CLASS_MAX_SEATS` (150). **Never read this directly** — `0` is a legacy "unlimited" sentinel on pre-cap classes. Read via `lxp_get_class_max_seats()`, write via `lxp_clamp_class_max_seats()` (both in `lms/tl-constants.php`). |
 | `lxp_class_code_expires` | datetime; empty = never |
 | `lxp_class_code_revoked` | `'1'` or `''` |
 | `lxp_class_alias_mode` | **Vestigial.** Written by classes created before nickname-only joining; nothing reads it. See §3b. |
@@ -180,7 +180,7 @@ The client always receives the **same generic message**; the reason is returned 
 
 Each token account gets a per-student **claim link** (`?claim=<48 hex>`), shown once at provisioning. Only its SHA-256 is stored (`claim_token_hash`), so the server cannot reproduce a lost link — the teacher re-issues via `/class/member/reissue`, which rotates the secret and invalidates the old link.
 
-The class code alone is **not** sufficient to log back in: classmates share it. Redeeming again would consume a second seat, and in `open` alias mode would mint an unlimited number of duplicate accounts, since nothing ties a browser to a seat it already holds.
+The class code alone is **not** sufficient to log back in: classmates share it. Redeeming again would consume a second seat, and would keep minting duplicate accounts up to the class's seat cap, since nothing ties a browser to a seat it already holds.
 
 ### Claim URL shape
 
@@ -293,7 +293,7 @@ Claim links can only be printed in the session they were minted, since the serve
 2. Enrollment goes through LP's `UserCourseModel::save()`, which invalidates its own caches — see §3a-bis. Do not "simplify" it back to a raw `$wpdb->insert()`: that silently leaves LP's per-course student-count caches stale. `flush_lp_caches()` is the pre-4.2.5 fallback only.
 3. Claim links are unrecoverable by design. "Print claim slips" only prints links minted in the current modal session.
 4. `lxp/functions.php` is **not** loaded in REST context — REST callbacks must use `TL_Class_Member_Repository` directly rather than `lxp_get_class_seats_taken()`.
-5. Seat labels auto-grow only for unlimited-seat classes. A capped class that runs out returns `class_full`; raise `lxp_class_max_seats` (which re-syncs the pool) rather than editing labels.
+5. Every class is capped — there is no unlimited any more, and `TL_CLASS_MAX_SEATS` (150) is the hard ceiling. `sync_seat_pool()` materialises only a working head of the pool (30 labels, or `taken + 10`) rather than all 150; `next_open_seats()` grows it on demand and stops at the cap. A class that runs out returns `class_full`; raise `lxp_class_max_seats` rather than editing labels.
 6. **A student can type something name-like, and nothing structural stops them.** `assigned` mode — the dropdown that made this impossible — was removed at the client's request; every class is now nickname-typed. `looks_like_pii()` catches email- and phone-shaped values only. See §3b before making any claim about what the server does and does not hold.
 7. **Seat-count race:** two students submitting simultaneously against the last seat can over-fill a class by one. The `UNIQUE (class_id, alias_label)` index closes the *alias* race hard, so nobody ever shares a seat label; only the count can drift, and only by one. Accepted rather than serialised behind a lock — over-enrolling one student is far less damaging than blocking a whole class on a lock timeout.
 8. Class membership lives in **two** places (`lxp_student_ids` meta + `lxp_class_members`) and that is deliberate, not redundancy — see §4. Any code that rewrites `lxp_student_ids` wholesale must call `Rest_Lxp_Class_Redemption::reconcile_class_student_meta()` afterwards.

@@ -208,8 +208,11 @@ class Rest_Lxp_Class
 		// ===== Registration-code controls (zero-PII enrollment) ==============
 		// Seat cap, expiry, revoke and alias mode gate the code-redemption
 		// endpoint. See Rest_Lxp_Class_Redemption + docs/student-privacy-zone-a-context.md
+		// Clamped, not absint()'d: seats are capped at TL_CLASS_MAX_SEATS and the
+		// modal's max= attribute is a hint only. A class that never posts the
+		// field simply has no meta, which reads back as the cap.
 		if ( null !== $request->get_param('lxp_class_max_seats') ) {
-			update_post_meta($class_post_id, 'lxp_class_max_seats', absint($request->get_param('lxp_class_max_seats')));
+			update_post_meta($class_post_id, 'lxp_class_max_seats', lxp_clamp_class_max_seats($request->get_param('lxp_class_max_seats')));
 		}
 
 		if ( null !== $request->get_param('lxp_class_code_expires') ) {
@@ -408,7 +411,7 @@ class Rest_Lxp_Class
 		$class->lxp_class_course_ids = get_post_meta($class_id, 'lxp_class_course_ids');
 		$class->lxp_class_code = get_post_meta($class_id, 'lxp_class_code', true);
 		// Registration-code controls used by the code-redemption flow.
-		$class->lxp_class_max_seats = (int) get_post_meta($class_id, 'lxp_class_max_seats', true);
+		$class->lxp_class_max_seats = lxp_get_class_max_seats($class_id);
 		$class->lxp_class_code_expires = get_post_meta($class_id, 'lxp_class_code_expires', true);
 		$class->lxp_class_code_revoked = (bool) get_post_meta($class_id, 'lxp_class_code_revoked', true);
 		$members = new TL_Class_Member_Repository();

@@ -99,6 +99,7 @@
     var classId    = 0;
     var vault      = null;
     var roster     = [];
+    var maxSeats   = <?php echo (int) TL_CLASS_MAX_SEATS; ?>;
     var dirty      = false;
     // Claim links exist in plaintext only at the moment they are minted — the
     // server keeps hashes. Hold this session's in memory for printing.
@@ -154,9 +155,11 @@
         tbody.innerHTML = '';
         roster = data.roster || [];
 
-        var seats = data.max_seats > 0
-            ? (data.seats_taken + ' / ' + data.max_seats)
-            : (data.seats_taken + ' / unlimited');
+        // Every class is capped now, so max_seats is always a real number. Keep
+        // the last one so a re-render that has no fresh server payload (the
+        // vault-unlock path) does not flash "N / 0".
+        if (data.max_seats > 0) { maxSeats = data.max_seats; }
+        var seats = data.seats_taken + ' / ' + maxSeats;
 
         document.getElementById('lxp-roster-summary').innerHTML =
             '<strong>Code:</strong> <code>' + esc(data.class_code || '—') + '</code>' +
@@ -431,7 +434,7 @@
                 renderRoster({
                     roster: roster,
                     seats_taken: roster.length,
-                    max_seats: 0,
+                    max_seats: maxSeats,
                     class_code: null
                 });
                 loadRoster();
@@ -511,6 +514,15 @@
         document.getElementById('lxp-roster-add-seats').addEventListener('click', function () {
             var count = parseInt(document.getElementById('lxp-roster-seat-count').value, 10) || 0;
             if (count < 1) { return; }
+
+            // The server enforces the cap too; this just gives a straight answer
+            // instead of silently returning a pile of skipped seats.
+            var remaining = Math.max(0, maxSeats - roster.length);
+            if (remaining < 1) {
+                showError('This class is already at its seat cap of ' + maxSeats + '.');
+                return;
+            }
+            if (count > remaining) { count = remaining; }
 
             showError('');
             var btn = this;

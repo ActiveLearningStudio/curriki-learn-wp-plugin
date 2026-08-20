@@ -35,6 +35,55 @@ if ( ! function_exists( 'lxp_get_grade_options' ) ) {
     }
 }
 
+/**
+ * Hard ceiling on how many students one class may hold.
+ *
+ * Seats used to be uncapped: `lxp_class_max_seats = 0` meant "unlimited" and the
+ * seat pool grew on demand forever. There is now a real ceiling, so `0` is no
+ * longer a special value — it resolves to the ceiling like any other
+ * out-of-range number.
+ *
+ * Existing classes still have `0` stored and are deliberately not migrated:
+ * every read goes through lxp_get_class_max_seats(), so a legacy `0` and a
+ * fresh `150` behave identically. Never read the meta directly.
+ *
+ * Lives here rather than in lxp/functions.php for the same reason as
+ * lxp_get_grade_options() — REST callbacks need it and functions.php is not
+ * loaded in REST context (CLAUDE.md gotcha #13).
+ */
+const TL_CLASS_MAX_SEATS = 150;
+
+/**
+ * Coerce any submitted seat cap into the allowed range.
+ *
+ * @param  mixed $value Raw submitted value.
+ * @return int          Between 1 and TL_CLASS_MAX_SEATS.
+ */
+if ( ! function_exists( 'lxp_clamp_class_max_seats' ) ) {
+    function lxp_clamp_class_max_seats( $value ) {
+        $value = (int) $value;
+
+        // < 1 covers both "unset" and the legacy 0-means-unlimited sentinel.
+        if ( $value < 1 ) {
+            return TL_CLASS_MAX_SEATS;
+        }
+
+        return min( $value, TL_CLASS_MAX_SEATS );
+    }
+}
+
+/**
+ * The effective seat cap for a class. Always a positive integer.
+ *
+ * @param  int $class_id
+ * @return int
+ */
+if ( ! function_exists( 'lxp_get_class_max_seats' ) ) {
+    function lxp_get_class_max_seats( $class_id ) {
+        return lxp_clamp_class_max_seats( get_post_meta( (int) $class_id, 'lxp_class_max_seats', true ) );
+    }
+}
+
 const Allowed_Activity_types = [
             'Course Presentation',
             'Crossroads',

@@ -95,6 +95,8 @@ wp rest route list --namespace=lms/v1 --fields=route,methods
 | 20 | `teacher-classes.php` renders **no** navigation — the top navbar and the section nav row were both removed, and logout now lives as a plain link in the heading row. Do not reintroduce `trek/navigation.php` or `trek/user-profile-block.php` there without also removing that logout link, or teachers get two. |
 | 21 | Students always **type a nickname** to join — the `assigned` seat-label dropdown was removed at the client's request. `resolve_alias()` no longer branches, so classes still carrying `lxp_class_alias_mode = 'assigned'` keep working; that meta is vestigial and nothing reads it. Do **not** confuse this with `get_seat_pool()` / `next_open_seats()` / `lxp_class_seat_labels`, which are alive and belong to the Roster modal, CSV import and claim links. The nickname field's label is doing privacy work now (see `docs/student-privacy-zone-a-context.md` §3b) — don't reword it into "Your name". |
 | 22 | In `lxp-class-join-widget.php`, the nickname wrapper's resting state is `display:none` **in the widget's stylesheet**. Reveal it with an explicit `display = 'block'`; assigning `''` only clears the inline declaration and lets the stylesheet rule win again, leaving the field permanently invisible. That was a live bug — and it hid for weeks because a `<select>` auto-selects its first option, so the old dropdown mode kept submitting a valid value from an invisible control. |
+| 23 | Never `get_post_meta(…, 'lxp_class_max_seats')` directly. Seats are capped at `TL_CLASS_MAX_SEATS` (150) and `0` is a **legacy "unlimited" sentinel** still stored on pre-cap classes — a raw read gives you `0` and every `$max > 0 &&` guard silently turns back into "no cap". Read via `lxp_get_class_max_seats()`, write via `lxp_clamp_class_max_seats()` (both in `lms/tl-constants.php`, for gotcha #19's reason). There is no migration and none is needed. |
+| 24 | `TL_Teacher_Access` (`includes/class-tiny-lxp-teacher-access.php`) registers its hooks **itself**, not through `Tiny_LXP_Platform_Loader` — that is deliberate and contradicts the hook-routing rule above. The loader only runs when `Tiny_LXP_Platform::isOK()` passes, so routing it there would hand teachers wp-admin back the moment an unrelated dependency check failed. It fails **open** for administrators (`manage_options`) on purpose: locking an admin out of wp-admin is not recoverable from the front end. |
 
 ---
 
@@ -148,6 +150,22 @@ The form collects first/last name, email, password + confirm, and grades — **n
 Creates, as one unit with compensating deletes on failure: a WP user (role `lp_teacher`, `user_login` = email) **and** a `tl_teacher` post (`lxp_teacher_admin_id`, `lxp_teacher_school_id`, `grades` JSON, `settings_active`). Both halves are mandatory — `teacher-dashboard.php` hard-`die()`s for an `lp_teacher` user with no `tl_teacher` post.
 
 Distinct from `Rest_Lxp_Teacher::create()` (the admin path), which takes `teacher_school_id` straight from the request with no capability check — never expose that one publicly.
+
+---
+
+## Teacher Front-End Lockdown
+
+`lp_teacher` users never see wp-admin. `TL_Teacher_Access` (`includes/class-tiny-lxp-teacher-access.php`) enforces this with three hooks:
+
+| Hook | Effect |
+|---|---|
+| `login_redirect` (99) | Teachers land on `/classes/`, ignoring `redirect_to` — that value is usually the wp-admin URL that bounced them to the login form. |
+| `admin_init` (1) | Any wp-admin request is redirected back to `/classes/`. Exempts `wp_doing_ajax()` and `DOING_CRON`, which fire `admin_init` without rendering an admin screen. |
+| `show_admin_bar` | Hidden — it links only to places they cannot reach. |
+
+Two deliberate deviations, both explained in the file header and in gotchas #23–24: it self-registers rather than using the loader (an access control must not sit behind `isOK()`), and it fails **open** for `manage_options` holders.
+
+Scoped to `lp_teacher` only. `lxp_teacher_admin` (school staff) is untouched.
 
 ---
 

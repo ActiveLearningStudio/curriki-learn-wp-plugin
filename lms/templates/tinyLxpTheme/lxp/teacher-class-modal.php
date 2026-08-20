@@ -47,8 +47,8 @@
                             <p class="personal-text">Registration Code</p>
                             <input type="hidden" name="lxp_class_code_controls" value="1">
                             <div class="search_box">
-                                <label class="trek-label" for="lxp_class_max_seats">Max Seats <small>(0 = unlimited)</small></label>
-                                <input type="number" min="0" step="1" class="form-control" id="lxp_class_max_seats" name="lxp_class_max_seats" value="0">
+                                <label class="trek-label" for="lxp_class_max_seats">Max Seats <small>(1&ndash;<?php echo (int) TL_CLASS_MAX_SEATS; ?>)</small></label>
+                                <input type="number" min="1" max="<?php echo (int) TL_CLASS_MAX_SEATS; ?>" step="1" class="form-control" id="lxp_class_max_seats" name="lxp_class_max_seats" value="<?php echo (int) TL_CLASS_MAX_SEATS; ?>">
                             </div>
                             <div class="search_box">
                                 <label class="trek-label" for="lxp_class_code_expires">Code Expires <small>(blank = never)</small></label>
@@ -261,7 +261,7 @@ function onClassEdit(class_id) {
         }
 
         // Registration-code controls
-        jQuery('#lxp_class_max_seats').val(class_record.lxp_class_max_seats || 0);
+        jQuery('#lxp_class_max_seats').val(class_record.lxp_class_max_seats || <?php echo (int) TL_CLASS_MAX_SEATS; ?>);
         // <input type="datetime-local"> needs YYYY-MM-DDTHH:MM, not a MySQL datetime.
         jQuery('#lxp_class_code_expires').val(
             class_record.lxp_class_code_expires
@@ -303,7 +303,7 @@ function onClassEdit(class_id) {
             jQuery("#class_post_id").val(0);
             setScheduleOpen(false);
             // Reset registration-code controls back to their Add-new defaults.
-            jQuery('#lxp_class_max_seats').val(0);
+            jQuery('#lxp_class_max_seats').val(<?php echo (int) TL_CLASS_MAX_SEATS; ?>);
             jQuery('#lxp_class_code_expires').val('');
             jQuery('#lxp_class_code_revoked').prop('checked', false);
             jQuery('#classModal #aboutClass').val("");

@@ -47,7 +47,7 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 		$this->add_control( 'alias_label', [
 			'label'       => esc_html__( 'Nickname Field Label', 'tinylxp' ),
 			'type'        => Controls_Manager::TEXT,
-			'default'     => esc_html__( 'Choose a nickname', 'tinylxp' ),
+			'default'     => esc_html__( 'Choose a Name', 'tinylxp' ),
 			'description' => esc_html__( 'Keep this asking for a nickname. Students type this freely and it becomes their display name on the server, so wording that invites a real name defeats the point of the privacy design.', 'tinylxp' ),
 		] );
 
@@ -317,7 +317,7 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 					<label for="<?php echo esc_attr( $uid ); ?>-alias"><?php echo $alias_label; ?></label>
 					<input type="text" id="<?php echo esc_attr( $uid ); ?>-alias" class="lxp-cj-alias"
 					       maxlength="32" autocomplete="off" spellcheck="false"
-					       placeholder="<?php echo esc_attr__( 'Choose a nickname', 'tinylxp' ); ?>" />
+					       placeholder="<?php echo esc_attr__( 'Choose a Name', 'tinylxp' ); ?>" />
 				</div>
 
 				<button type="submit" class="lxp-cj-btn"><?php echo $button_label; ?></button>
