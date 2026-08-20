@@ -411,11 +411,31 @@
         });
 
         // Always drop the key when the modal closes.
-        el.addEventListener('hide.bs.modal', function () {
+        el.addEventListener('hide.bs.modal', function (e) {
+            // The reload below is about to throw away unsaved name edits along
+            // with everything else. The "Hide names" button already guards this
+            // same case; closing the modal (X, backdrop, Escape) did not, and
+            // now that closing reloads the page, it needs to.
+            if (dirty && !window.confirm('You have unsaved name changes that will be lost. Close anyway?')) {
+                e.preventDefault();
+                return;
+            }
             if (vault) { vault.lock(); }
             document.getElementById('lxp-vault-pass').value  = '';
             document.getElementById('lxp-vault-pass2').value = '';
             renderVaultState();
+        });
+
+        // The class list behind this modal shows a seats-used count and a
+        // Courses/roster-derived state that this modal can change (seats
+        // created, CSV import, students joining live via code while the modal
+        // was open). Rather than track every mutation site, just reload once
+        // the close animation finishes ('hidden', not 'hide' — mid-transition
+        // would flash). Only after a roster was actually loaded, so opening
+        // and immediately dismissing (e.g. Escape before data arrives) isn't
+        // a wasted reload.
+        el.addEventListener('hidden.bs.modal', function () {
+            if (classId) { window.location.reload(); }
         });
 
         // --- Unlock / create -------------------------------------------
