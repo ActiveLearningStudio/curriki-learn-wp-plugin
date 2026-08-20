@@ -219,12 +219,14 @@ class Rest_Lxp_Class
 
 		// Checkboxes only post when checked, so treat an absent value as unchecked
 		// whenever the modal declares it submitted the code-controls block.
+		//
+		// There is no alias-mode choice any more: students always type a nickname.
+		// See Rest_Lxp_Class_Redemption::resolve_alias(). `lxp_class_alias_mode`
+		// survives as dead meta on classes created before that change; nothing
+		// reads it.
 		if ( $request->get_param('lxp_class_code_controls') ) {
 			$revoked = filter_var($request->get_param('lxp_class_code_revoked'), FILTER_VALIDATE_BOOLEAN);
 			update_post_meta($class_post_id, 'lxp_class_code_revoked', $revoked ? '1' : '');
-
-			$alias_mode = 'open' === $request->get_param('lxp_class_alias_mode') ? 'open' : 'assigned';
-			update_post_meta($class_post_id, 'lxp_class_alias_mode', $alias_mode);
 		}
 
 		// ===== Grades ========================================================
@@ -409,8 +411,6 @@ class Rest_Lxp_Class
 		$class->lxp_class_max_seats = (int) get_post_meta($class_id, 'lxp_class_max_seats', true);
 		$class->lxp_class_code_expires = get_post_meta($class_id, 'lxp_class_code_expires', true);
 		$class->lxp_class_code_revoked = (bool) get_post_meta($class_id, 'lxp_class_code_revoked', true);
-		$alias_mode = get_post_meta($class_id, 'lxp_class_alias_mode', true);
-		$class->lxp_class_alias_mode = 'open' === $alias_mode ? 'open' : 'assigned';
 		$members = new TL_Class_Member_Repository();
 		$class->lxp_class_seats_taken = $members->count_active($class_id);
 		return wp_send_json_success(array("class" => $class));

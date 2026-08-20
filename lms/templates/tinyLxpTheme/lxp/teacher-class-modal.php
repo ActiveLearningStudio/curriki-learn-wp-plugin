@@ -54,14 +54,6 @@
                                 <label class="trek-label" for="lxp_class_code_expires">Code Expires <small>(blank = never)</small></label>
                                 <input type="datetime-local" class="form-control" id="lxp_class_code_expires" name="lxp_class_code_expires">
                             </div>
-                            <div class="search_box">
-                                <label class="trek-label" for="lxp_class_alias_mode">Student Name Mode</label>
-                                <select class="form-select form-control" id="lxp_class_alias_mode" name="lxp_class_alias_mode">
-                                    <option value="assigned">Assigned seat labels (no typing — recommended)</option>
-                                    <option value="open">Student picks a nickname</option>
-                                </select>
-                                <small class="text-muted">Assigned mode gives students a dropdown of seat labels, so no real name can be entered.</small>
-                            </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" value="1" id="lxp_class_code_revoked" name="lxp_class_code_revoked">
                                 <label class="form-check-label" for="lxp_class_code_revoked">Revoke this code (blocks new joins)</label>
@@ -276,7 +268,6 @@ function onClassEdit(class_id) {
                 ? String(class_record.lxp_class_code_expires).replace(' ', 'T').slice(0, 16)
                 : ''
         );
-        jQuery('#lxp_class_alias_mode').val(class_record.lxp_class_alias_mode || 'assigned');
         jQuery('#lxp_class_code_revoked').prop('checked', !!class_record.lxp_class_code_revoked);
 
         classModalObj.show();
@@ -314,7 +305,6 @@ function onClassEdit(class_id) {
             // Reset registration-code controls back to their Add-new defaults.
             jQuery('#lxp_class_max_seats').val(0);
             jQuery('#lxp_class_code_expires').val('');
-            jQuery('#lxp_class_alias_mode').val('assigned');
             jQuery('#lxp_class_code_revoked').prop('checked', false);
             jQuery('#classModal #aboutClass').val("");
             jQuery('#classModal #first_name_class').val("");
