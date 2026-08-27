@@ -160,6 +160,36 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		] );
 
 		$this->end_controls_section();
+
+		// ── Submit button style ──────────────────────────────────────────
+		$this->start_controls_section( 'section_style_submit_btn', [
+			'label' => esc_html__( 'Create Account Button', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'submit_btn_bg_color', [
+			'label'     => esc_html__( 'Background', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-tsu-btn' => 'background: {{VALUE}};',
+			],
+		] );
+
+		$this->add_control( 'submit_btn_text_color', [
+			'label'     => esc_html__( 'Text Color', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-tsu-btn' => 'color: {{VALUE}};',
+			],
+		] );
+
+		$this->add_group_control( Group_Control_Typography::get_type(), [
+			'name'     => 'submit_btn_typography',
+			'label'    => esc_html__( 'Typography', 'tinylxp' ),
+			'selector' => '{{WRAPPER}} .lxp-tsu-btn',
+		] );
+
+		$this->end_controls_section();
 	}
 
 	protected function render() {
@@ -280,11 +310,19 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		#<?php echo esc_attr( $uid ); ?> button.lxp-tsu-btn {
 			width: 100%;
 			padding: 11px 16px;
-			font-size: 15px;
-			font-weight: 500;
 			border: none;
 			border-radius: 6px;
 			cursor: pointer;
+		}
+		/* font-size/weight/background/color live here instead of the ID-scoped
+		   rule above so the Create Account Button section's {{WRAPPER}}
+		   .lxp-tsu-btn selectors (specificity 20) can override them; the ID
+		   selector above (111) would always win regardless of what the panel
+		   sets. This is the fallback used when those controls are left unset —
+		   same look as before this section existed. */
+		.lxp-tsu-btn {
+			font-size: 15px;
+			font-weight: 500;
 			background: <?php echo $btn_bg; ?>;
 			color: <?php echo $btn_text; ?>;
 		}

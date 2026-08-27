@@ -181,6 +181,39 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 		] );
 
 		$this->end_controls_section();
+
+		// ── Join button style ────────────────────────────────────────────
+		// Scoped to .lxp-cj-btn only — the Copy and Continue buttons on the
+		// ticket screen keep the Button Background/Button Text colors above
+		// and are not affected by this section.
+		$this->start_controls_section( 'section_style_join_btn', [
+			'label' => esc_html__( 'Join Button', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'join_btn_bg_color', [
+			'label'     => esc_html__( 'Background', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-cj-btn' => 'background: {{VALUE}};',
+			],
+		] );
+
+		$this->add_control( 'join_btn_text_color', [
+			'label'     => esc_html__( 'Text Color', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-cj-btn' => 'color: {{VALUE}};',
+			],
+		] );
+
+		$this->add_group_control( Group_Control_Typography::get_type(), [
+			'name'     => 'join_btn_typography',
+			'label'    => esc_html__( 'Typography', 'tinylxp' ),
+			'selector' => '{{WRAPPER}} .lxp-cj-btn',
+		] );
+
+		$this->end_controls_section();
 	}
 
 	protected function render() {
@@ -261,14 +294,23 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 		#<?php echo esc_attr( $uid ); ?> button {
 			width: 100%;
 			padding: 10px 16px;
-			font-size: 15px;
-			font-weight: 500;
 			border: none;
 			border-radius: 6px;
 			cursor: pointer;
+			transition: opacity .15s ease;
+		}
+		/* font-size/weight/background/color live here instead of the ID-scoped
+		   rule above so the Join Button section's {{WRAPPER}} .lxp-cj-btn
+		   selectors (specificity 20) can override them; an ID selector (101)
+		   would always win regardless of what the panel sets. This rule is the
+		   fallback both the Join and Continue buttons share when the dedicated
+		   Join Button controls are left unset — same look as before this
+		   section existed. */
+		.lxp-cj-btn, .lxp-cj-continue {
+			font-size: 15px;
+			font-weight: 500;
 			background: <?php echo $btn_bg; ?>;
 			color: <?php echo $btn_text; ?>;
-			transition: opacity .15s ease;
 		}
 		#<?php echo esc_attr( $uid ); ?> button:hover { opacity: .92; }
 		#<?php echo esc_attr( $uid ); ?> button[disabled] { opacity: .6; cursor: default; }
