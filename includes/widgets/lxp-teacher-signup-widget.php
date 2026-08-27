@@ -17,6 +17,7 @@
 namespace Edudeme\Elementor;
 
 use Elementor\Controls_Manager;
+use Elementor\Group_Control_Typography;
 
 class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 
@@ -110,6 +111,55 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		] );
 
 		$this->end_controls_section();
+
+		// ── Heading style ─────────────────────────────────────────────────
+		// No defaults on purpose: an unset control emits no CSS at all, so the
+		// heading carries on inheriting the Text Color above exactly as it did
+		// before these controls existed.
+		$this->start_controls_section( 'section_style_heading', [
+			'label' => esc_html__( 'Heading', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'heading_color', [
+			'label'     => esc_html__( 'Color', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-tsu-heading' => 'color: {{VALUE}};',
+			],
+		] );
+
+		$this->add_group_control( Group_Control_Typography::get_type(), [
+			'name'     => 'heading_typography',
+			'label'    => esc_html__( 'Typography', 'tinylxp' ),
+			'selector' => '{{WRAPPER}} .lxp-tsu-heading',
+		] );
+
+		$this->end_controls_section();
+
+		// ── Field label style ─────────────────────────────────────────────
+		// Targets the labels above the inputs only. The grade checkbox captions
+		// are option text, not field labels, and keep their own smaller type.
+		$this->start_controls_section( 'section_style_labels', [
+			'label' => esc_html__( 'Field Labels', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'label_color', [
+			'label'     => esc_html__( 'Color', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-tsu-label' => 'color: {{VALUE}};',
+			],
+		] );
+
+		$this->add_group_control( Group_Control_Typography::get_type(), [
+			'name'     => 'label_typography',
+			'label'    => esc_html__( 'Typography', 'tinylxp' ),
+			'selector' => '{{WRAPPER}} .lxp-tsu-label',
+		] );
+
+		$this->end_controls_section();
 	}
 
 	protected function render() {
@@ -162,10 +212,22 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 			border-radius: 8px;
 			font-family: 'Google Sans', Roboto, Arial, sans-serif;
 		}
-		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-heading {
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-heading { margin-bottom: 6px; }
+		/* Base type for the two elements the Style tab exposes. Intentionally
+		   NOT prefixed with the wrapper id: an ID selector scores 100 and would
+		   beat Elementor's own `{{WRAPPER}} .lxp-tsu-heading` rule, leaving the
+		   Heading / Field Labels controls with no visible effect. A single class
+		   scores 10, under every form {{WRAPPER}} takes, so whatever is set in
+		   the panel wins regardless of stylesheet order. Colour is left out on
+		   purpose — it inherits from the wrapper's Text Color, which is what an
+		   unset Heading/Label Color has to fall back to. */
+		.lxp-tsu-heading {
 			font-size: 22px;
 			font-weight: 500;
-			margin-bottom: 6px;
+		}
+		.lxp-tsu-label {
+			font-size: 13px;
+			font-weight: 500;
 		}
 		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-intro {
 			font-size: 14px;
@@ -175,8 +237,6 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		}
 		#<?php echo esc_attr( $uid ); ?> label {
 			display: block;
-			font-size: 13px;
-			font-weight: 500;
 			margin-bottom: 4px;
 		}
 		#<?php echo esc_attr( $uid ); ?> input[type="text"],
@@ -253,30 +313,30 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 
 				<div class="lxp-tsu-row">
 					<div>
-						<label for="<?php echo esc_attr( $uid ); ?>-first"><?php esc_html_e( 'First name', 'tinylxp' ); ?></label>
+						<label class="lxp-tsu-label" for="<?php echo esc_attr( $uid ); ?>-first"><?php esc_html_e( 'First name', 'tinylxp' ); ?></label>
 						<input type="text" id="<?php echo esc_attr( $uid ); ?>-first" class="lxp-tsu-first" required autocomplete="given-name" />
 					</div>
 					<div>
-						<label for="<?php echo esc_attr( $uid ); ?>-last"><?php esc_html_e( 'Last name', 'tinylxp' ); ?></label>
+						<label class="lxp-tsu-label" for="<?php echo esc_attr( $uid ); ?>-last"><?php esc_html_e( 'Last name', 'tinylxp' ); ?></label>
 						<input type="text" id="<?php echo esc_attr( $uid ); ?>-last" class="lxp-tsu-last" required autocomplete="family-name" />
 					</div>
 				</div>
 
-				<label for="<?php echo esc_attr( $uid ); ?>-email"><?php esc_html_e( 'Email', 'tinylxp' ); ?></label>
+				<label class="lxp-tsu-label" for="<?php echo esc_attr( $uid ); ?>-email"><?php esc_html_e( 'Email', 'tinylxp' ); ?></label>
 				<input type="email" id="<?php echo esc_attr( $uid ); ?>-email" class="lxp-tsu-email" required autocomplete="email" />
 
 				<div class="lxp-tsu-row">
 					<div>
-						<label for="<?php echo esc_attr( $uid ); ?>-pass"><?php esc_html_e( 'Password', 'tinylxp' ); ?></label>
+						<label class="lxp-tsu-label" for="<?php echo esc_attr( $uid ); ?>-pass"><?php esc_html_e( 'Password', 'tinylxp' ); ?></label>
 						<input type="password" id="<?php echo esc_attr( $uid ); ?>-pass" class="lxp-tsu-pass" required minlength="8" autocomplete="new-password" />
 					</div>
 					<div>
-						<label for="<?php echo esc_attr( $uid ); ?>-pass2"><?php esc_html_e( 'Confirm password', 'tinylxp' ); ?></label>
+						<label class="lxp-tsu-label" for="<?php echo esc_attr( $uid ); ?>-pass2"><?php esc_html_e( 'Confirm password', 'tinylxp' ); ?></label>
 						<input type="password" id="<?php echo esc_attr( $uid ); ?>-pass2" class="lxp-tsu-pass2" required minlength="8" autocomplete="new-password" />
 					</div>
 				</div>
 
-				<label><?php echo $grades_label; ?></label>
+				<label class="lxp-tsu-label"><?php echo $grades_label; ?></label>
 				<div class="lxp-tsu-grades">
 					<?php foreach ( $grades as $grade ) : ?>
 						<label>
