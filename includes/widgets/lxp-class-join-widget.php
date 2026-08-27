@@ -16,6 +16,7 @@
 namespace Edudeme\Elementor;
 
 use Elementor\Controls_Manager;
+use Elementor\Group_Control_Typography;
 
 class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 
@@ -133,6 +134,53 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 		] );
 
 		$this->end_controls_section();
+
+		// ── Heading style ─────────────────────────────────────────────────
+		// Deliberately left with no default: an unset control emits no CSS, so
+		// the heading keeps inheriting the Text Color above exactly as it did
+		// before these controls existed.
+		$this->start_controls_section( 'section_style_heading', [
+			'label' => esc_html__( 'Heading', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'heading_color', [
+			'label'     => esc_html__( 'Color', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-cj-heading' => 'color: {{VALUE}};',
+			],
+		] );
+
+		$this->add_group_control( Group_Control_Typography::get_type(), [
+			'name'     => 'heading_typography',
+			'label'    => esc_html__( 'Typography', 'tinylxp' ),
+			'selector' => '{{WRAPPER}} .lxp-cj-heading',
+		] );
+
+		$this->end_controls_section();
+
+		// ── Field label style ─────────────────────────────────────────────
+		$this->start_controls_section( 'section_style_labels', [
+			'label' => esc_html__( 'Field Labels', 'tinylxp' ),
+			'tab'   => Controls_Manager::TAB_STYLE,
+		] );
+
+		$this->add_control( 'label_color', [
+			'label'     => esc_html__( 'Color', 'tinylxp' ),
+			'type'      => Controls_Manager::COLOR,
+			'selectors' => [
+				'{{WRAPPER}} .lxp-cj-label' => 'color: {{VALUE}};',
+			],
+		] );
+
+		$this->add_group_control( Group_Control_Typography::get_type(), [
+			'name'     => 'label_typography',
+			'label'    => esc_html__( 'Typography', 'tinylxp' ),
+			'selector' => '{{WRAPPER}} .lxp-cj-label',
+		] );
+
+		$this->end_controls_section();
 	}
 
 	protected function render() {
@@ -177,18 +225,24 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 			padding: 24px;
 			font-family: 'Google Sans', Roboto, Arial, sans-serif;
 		}
-		#<?php echo esc_attr( $uid ); ?> .lxp-cj-heading {
-			font-size: 18px;
-			font-weight: 500;
-			margin: 0 0 16px;
-			color: <?php echo $text_col; ?>;
-		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-cj-heading { margin: 0 0 16px; }
 		#<?php echo esc_attr( $uid ); ?> label {
 			display: block;
-			font-size: 13px;
 			margin-bottom: 6px;
-			color: <?php echo $text_col; ?>;
 		}
+		/* Base type for the two elements the Style tab exposes. Intentionally
+		   NOT prefixed with the wrapper id: an ID selector scores 100 and would
+		   beat Elementor's own `{{WRAPPER}} .lxp-cj-heading` rule, leaving the
+		   Heading / Field Labels controls with no visible effect.
+		   A single class scores 10, under every form {{WRAPPER}} takes, so
+		   anything set in the panel wins regardless of stylesheet order.
+		   Colour is left out on purpose — it inherits from the wrapper's Text
+		   Color, which is what an unset Heading/Label Color must fall back to. */
+		.lxp-cj-heading {
+			font-size: 18px;
+			font-weight: 500;
+		}
+		.lxp-cj-label { font-size: 13px; }
 		#<?php echo esc_attr( $uid ); ?> input[type="text"] {
 			width: 100%;
 			box-sizing: border-box;
@@ -300,7 +354,7 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 				<div class="lxp-cj-heading"><?php echo $heading; ?></div>
 				<?php endif; ?>
 
-				<label for="<?php echo esc_attr( $uid ); ?>-code"><?php echo $code_label; ?></label>
+				<label class="lxp-cj-label" for="<?php echo esc_attr( $uid ); ?>-code"><?php echo $code_label; ?></label>
 				<input type="text" id="<?php echo esc_attr( $uid ); ?>-code" class="lxp-cj-code"
 				       maxlength="6" required autocapitalize="characters" spellcheck="false" />
 
@@ -314,7 +368,7 @@ class LXP_Class_Join_Widget extends \Elementor\Widget_Base {
 					looks_like_pii() screen is what keeps real names off the server.
 				-->
 				<div class="lxp-cj-seat-wrap">
-					<label for="<?php echo esc_attr( $uid ); ?>-alias"><?php echo $alias_label; ?></label>
+					<label class="lxp-cj-label" for="<?php echo esc_attr( $uid ); ?>-alias"><?php echo $alias_label; ?></label>
 					<input type="text" id="<?php echo esc_attr( $uid ); ?>-alias" class="lxp-cj-alias"
 					       maxlength="32" autocomplete="off" spellcheck="false"
 					       placeholder="<?php echo esc_attr__( 'Choose a Name', 'tinylxp' ); ?>" />
