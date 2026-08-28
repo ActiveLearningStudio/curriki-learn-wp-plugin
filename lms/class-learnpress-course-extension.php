@@ -98,6 +98,7 @@ class TL_LearnPress_Course_Extension {
 
 	public function add_meta_boxes() {
 		$this->course_outcome_metabox();
+		$this->course_audience_metabox();
 	}
 
 	public function course_outcome_metabox() {
@@ -157,6 +158,98 @@ class TL_LearnPress_Course_Extension {
 		}
 
 		update_post_meta( $post_id, 'lxp_course_outcome', $outcome );
+	}
+
+	public function course_audience_metabox() {
+		$this->add_meta_box( array(
+			'lxp-course-audience',
+			esc_html__( 'Curriki Audience', 'tiny-lxp-platform' ),
+			array( $this, 'course_audience_metabox_html' ),
+			TL_COURSE_CPT,
+			'side',
+			'default',
+		) );
+	}
+
+	public function course_audience_metabox_html( $post = null ) {
+		$selected = array();
+		if ( $post && isset( $post->ID ) ) {
+			$terms = wp_get_object_terms( $post->ID, TL_COURSE_AUDIENCE_TAXONOMY, array( 'fields' => 'slugs' ) );
+			if ( ! is_wp_error( $terms ) ) {
+				$selected = $terms;
+			}
+		}
+
+		wp_nonce_field( 'save_lxp_course_audience', 'lxp_course_audience_nonce' );
+		?>
+		<p style="margin-top:0;">
+			<?php echo esc_html__( 'Which teachers may assign this course to a class.', 'tiny-lxp-platform' ); ?>
+		</p>
+		<?php foreach ( lxp_get_course_audience_terms() as $term ) : ?>
+			<p style="margin:0 0 6px;">
+				<label>
+					<input type="checkbox" name="lxp_course_audience[]" value="<?php echo esc_attr( $term['slug'] ); ?>" <?php checked( in_array( $term['slug'], $selected, true ) ); ?> />
+					<?php echo esc_html( $term['name'] ); ?>
+				</label>
+			</p>
+		<?php endforeach; ?>
+		<p style="margin-top:8px;color:#666;">
+			<?php echo esc_html__( 'Leave both unticked to offer the course to every teacher.', 'tiny-lxp-platform' ); ?>
+		</p>
+		<?php
+	}
+
+	/**
+	 * Store the audience terms without disturbing the rest of the course's categories.
+	 *
+	 * These two terms live in LearnPress's own course_category taxonomy, next to
+	 * subject categories such as Math. A plain wp_set_object_terms() call defaults
+	 * to $append = false and would wipe every one of those. So: append what was
+	 * ticked, then remove only the ones that were unticked. Never a single
+	 * replacing call.
+	 */
+	public function save_course_audience_terms( $post_id = null, $post = null ) {
+		$post_id = absint( $post_id );
+		if ( $post_id <= 0 ) {
+			return;
+		}
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+		if ( empty( $post ) || ! isset( $post->post_type ) || $post->post_type !== TL_COURSE_CPT ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+		if ( ! isset( $_POST['lxp_course_audience_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['lxp_course_audience_nonce'] ) ), 'save_lxp_course_audience' ) ) {
+			return;
+		}
+		if ( ! taxonomy_exists( TL_COURSE_AUDIENCE_TAXONOMY ) ) {
+			return;
+		}
+
+		$submitted = isset( $_POST['lxp_course_audience'] ) && is_array( $_POST['lxp_course_audience'] )
+			? array_map( 'sanitize_title', wp_unslash( $_POST['lxp_course_audience'] ) )
+			: array();
+
+		$checked   = array();
+		$unchecked = array();
+
+		foreach ( lxp_get_course_audience_terms() as $term ) {
+			if ( in_array( $term['slug'], $submitted, true ) ) {
+				$checked[] = $term['slug'];
+			} else {
+				$unchecked[] = $term['slug'];
+			}
+		}
+
+		if ( ! empty( $checked ) ) {
+			wp_set_object_terms( $post_id, $checked, TL_COURSE_AUDIENCE_TAXONOMY, true );
+		}
+		if ( ! empty( $unchecked ) ) {
+			wp_remove_object_terms( $post_id, $unchecked, TL_COURSE_AUDIENCE_TAXONOMY );
+		}
 	}
 
 	public function modify_list_row_actions($actions, $post) {

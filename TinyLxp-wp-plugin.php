@@ -143,6 +143,36 @@ function tl_lxp_maybe_upgrade_db() {
 add_action('plugins_loaded', 'tl_lxp_maybe_upgrade_db');
 
 /**
+ * Create the two course-audience terms in LearnPress's course_category taxonomy.
+ *
+ * Hooked on init at priority 20, not on activation: course_category is
+ * registered by LearnPress on init, so it does not exist any earlier, and the
+ * plugin is already active on running sites — relying on the activation hook
+ * would need a deactivate/reactivate in production (same reasoning as
+ * tl_lxp_maybe_upgrade_db above).
+ *
+ * The done-flag is deliberately NOT set when the taxonomy is missing, so a site
+ * that activates LearnPress later still gets its terms on the next request.
+ */
+function tl_lxp_maybe_install_course_audience_terms() {
+    if ('1' === get_option('tl_lxp_course_audience_terms')) {
+        return;
+    }
+    if (!taxonomy_exists(TL_COURSE_AUDIENCE_TAXONOMY)) {
+        return;
+    }
+
+    foreach (lxp_get_course_audience_terms() as $term) {
+        if (!term_exists($term['slug'], TL_COURSE_AUDIENCE_TAXONOMY)) {
+            wp_insert_term($term['name'], TL_COURSE_AUDIENCE_TAXONOMY, array('slug' => $term['slug']));
+        }
+    }
+
+    update_option('tl_lxp_course_audience_terms', '1');
+}
+add_action('init', 'tl_lxp_maybe_install_course_audience_terms', 20);
+
+/**
  * Begins execution of the plugin.
  *
  * Since everything within the plugin is registered via hooks,

@@ -464,14 +464,56 @@ class Rest_Lxp_Class
 		return wp_send_json_success('Courses Saved!');
 	}
 
+	/**
+	 * Courses offerable to a teacher, filtered by how that teacher registered.
+	 *
+	 * `teacher_id` is optional. Without it the response is every published
+	 * course, exactly as before this filter existed.
+	 */
 	public static function get_available_courses($request) {
-		$courses = get_posts(array(
+		$args = array(
 			'post_type'      => TL_COURSE_CPT,
 			'posts_per_page' => -1,
 			'post_status'    => 'publish',
 			'orderby'        => 'title',
 			'order'          => 'ASC',
-		));
+		);
+
+		$teacher_id = absint($request->get_param('teacher_id'));
+
+		if ($teacher_id > 0 && taxonomy_exists(TL_COURSE_AUDIENCE_TAXONOMY)) {
+			$register_type = lxp_get_teacher_register_type($teacher_id);
+			$terms         = lxp_get_course_audience_terms();
+			$mine          = $terms[$register_type]['slug'];
+			$other         = (TL_REGISTER_TYPE_K12 === $register_type)
+				? $terms[TL_REGISTER_TYPE_PD]['slug']
+				: $terms[TL_REGISTER_TYPE_K12]['slug'];
+
+			// Show the course if it carries MY audience term, or if it simply does
+			// not carry the OTHER one. A course with neither term is therefore
+			// offered to both teacher types, which is what keeps the pre-existing
+			// untagged catalogue visible.
+			//
+			// NOT EXISTS would be wrong here: it tests for having no
+			// course_category term at all, so a course tagged only with a subject
+			// category such as Math would vanish.
+			$args['tax_query'] = array(
+				'relation' => 'OR',
+				array(
+					'taxonomy' => TL_COURSE_AUDIENCE_TAXONOMY,
+					'field'    => 'slug',
+					'terms'    => $mine,
+				),
+				array(
+					'taxonomy' => TL_COURSE_AUDIENCE_TAXONOMY,
+					'field'    => 'slug',
+					'terms'    => $other,
+					'operator' => 'NOT IN',
+				),
+			);
+		}
+
+		$courses = get_posts($args);
 		$result = array_map(function($c) {
 			return array('ID' => $c->ID, 'post_title' => $c->post_title);
 		}, $courses);

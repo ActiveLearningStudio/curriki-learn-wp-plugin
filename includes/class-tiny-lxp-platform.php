@@ -246,6 +246,7 @@ class Tiny_LXP_Platform
         $this->loader->add_action('wp_enqueue_scripts', $course_extension, 'enqueue_student_course_styles');
         $this->loader->add_action('add_meta_boxes', $course_extension, 'add_meta_boxes');
         $this->loader->add_action('save_post_lp_course', $course_extension, 'save_course_outcome_meta', 10, 2);
+        $this->loader->add_action('save_post_lp_course', $course_extension, 'save_course_audience_terms', 20, 2);
         $this->loader->add_filter('tinylxp_lti_launch_metadata', $lesson_extension, 'provide_lti_launch_metadata', 10, 5);
         $this->loader->add_action('add_meta_boxes', $lesson_extension, 'add_meta_boxes');
         $this->loader->add_action('save_post_lp_lesson', $lesson_extension, 'save_tl_post', 10, 2);
