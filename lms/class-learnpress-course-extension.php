@@ -194,7 +194,7 @@ class TL_LearnPress_Course_Extension {
 			</p>
 		<?php endforeach; ?>
 		<p style="margin-top:8px;color:#666;">
-			<?php echo esc_html__( 'Leave both unticked to offer the course to every teacher.', 'tiny-lxp-platform' ); ?>
+			<?php echo esc_html__( 'Tick at least one — a course with neither ticked is not offered to any teacher.', 'tiny-lxp-platform' ); ?>
 		</p>
 		<?php
 	}
