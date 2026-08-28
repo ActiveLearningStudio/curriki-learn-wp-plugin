@@ -341,6 +341,41 @@
   background: transparent;
   color: #1a1a1a;
 }
+/* Courses picker only: show the whole course title, wrapping onto as many lines
+   as it needs, instead of cutting it off with an ellipsis.
+   Two rules combine to truncate it above: .dropdown-item2 p sets
+   text-overflow/overflow, and Bootstrap's own .dropdown-item contributes the
+   white-space: nowrap that makes them bite. The p inherits that nowrap, so it
+   has to be undone here on the p itself.
+   Scoped to #courses-list because .dropdown-item2 is shared with the
+   assignment, grade and people pickers, which are single-line by design. */
+#courses-list .dropdown-item2 p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  /* A single unbroken token in a title would otherwise push the flex row wider
+     than the modal rather than wrapping. */
+  overflow-wrap: anywhere;
+}
+#courses-list .time-date-box {
+  align-items: flex-start;
+}
+#courses-list .tags-body-detail {
+  /* The shared rule pins this to width: 87%, which both wastes row width and
+     leaves the title a fixed box to wrap inside. Let it take whatever the
+     checkbox does not. min-width: 0 is what allows a flex item to shrink below
+     its content's intrinsic width so the text wraps instead of overflowing. */
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+#courses-list .form-check-input {
+  /* flex: none so a long title cannot squash the checkbox; the margin sits it on
+     the optical centre of the first line (4px p padding + half of the 24px
+     line-height, less half the box). */
+  flex: none;
+  margin-top: 8px;
+}
 .dropdown .dropdown-menu.show {
   padding: 8px;
   margin: 14px 0 0 !important;
