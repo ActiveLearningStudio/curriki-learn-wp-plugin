@@ -403,7 +403,10 @@ if (!empty($args['district_post'])) {
     function loadAvailableCourses() {
         $.ajax({
             method: "POST",
-            url: apiUrl + "class/available-courses"
+            url: apiUrl + "class/available-courses",
+            // The endpoint filters the catalogue by how this teacher registered
+            // (K-12 vs Professional Development). Omitting it returns everything.
+            data: { teacher_id: jQuery("#class_teacher_id").val() }
         }).done(function(response) {
             var courses = response.data.courses;
             var html = '';

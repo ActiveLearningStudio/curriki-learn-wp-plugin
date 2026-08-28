@@ -46,10 +46,35 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 			'default' => esc_html__( 'Set up your account to start creating classes and enrolling students.', 'tinylxp' ),
 		] );
 
-		$this->add_control( 'grades_label', [
-			'label'   => esc_html__( 'Grades Field Label', 'tinylxp' ),
+		$this->add_control( 'register_type_label', [
+			'label'   => esc_html__( 'Register Type Question', 'tinylxp' ),
 			'type'    => Controls_Manager::TEXT,
-			'default' => esc_html__( 'Grades you teach', 'tinylxp' ),
+			'default' => esc_html__( 'How would you like to register with Curriki?', 'tinylxp' ),
+		] );
+
+		// Defaults come from lxp_get_register_type_options() so the wording sits
+		// in one place — the same list the REST callback validates against.
+		$register_types = function_exists( 'lxp_get_register_type_options' ) ? lxp_get_register_type_options() : [];
+
+		$this->add_control( 'register_type_k12_label', [
+			'label'   => esc_html__( 'Educator Option Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXTAREA,
+			'rows'    => 2,
+			'default' => isset( $register_types[ TL_REGISTER_TYPE_K12 ] ) ? $register_types[ TL_REGISTER_TYPE_K12 ] : '',
+		] );
+
+		$this->add_control( 'register_type_pd_label', [
+			'label'   => esc_html__( 'Professional Development Option Label', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXTAREA,
+			'rows'    => 3,
+			'default' => isset( $register_types[ TL_REGISTER_TYPE_PD ] ) ? $register_types[ TL_REGISTER_TYPE_PD ] : '',
+		] );
+
+		$this->add_control( 'grades_label', [
+			'label'       => esc_html__( 'Grades Field Label', 'tinylxp' ),
+			'type'        => Controls_Manager::TEXT,
+			'default'     => esc_html__( 'Grades you teach', 'tinylxp' ),
+			'description' => esc_html__( 'Only shown when the educator option is selected.', 'tinylxp' ),
 		] );
 
 		$this->add_control( 'button_label', [
@@ -214,6 +239,10 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		$grades_label = esc_html( $settings['grades_label'] );
 		$button_label = esc_html( $settings['button_label'] );
 
+		$register_type_label = esc_html( $settings['register_type_label'] );
+		$register_type_k12   = esc_html( $settings['register_type_k12_label'] );
+		$register_type_pd    = esc_html( $settings['register_type_pd_label'] );
+
 		$bg       = esc_attr( $settings['bg_color'] );
 		$text_col = esc_attr( $settings['text_color'] );
 		$btn_bg   = esc_attr( $settings['btn_bg_color'] );
@@ -292,6 +321,32 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		@media (max-width: 480px) {
 			#<?php echo esc_attr( $uid ); ?> .lxp-tsu-row { display: block; }
 		}
+		/* Stacked, one option per line — the Professional Development caption is
+		   a full sentence and wraps badly side by side with the educator one. */
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-regtype {
+			display: block;
+			margin-bottom: 18px;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-regtype label {
+			font-weight: 400;
+			font-size: 14px;
+			line-height: 1.4;
+			margin: 0 0 8px;
+			display: flex;
+			align-items: flex-start;
+			gap: 6px;
+			cursor: pointer;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-regtype label:last-child {
+			margin-bottom: 0;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-regtype input {
+			margin-top: 3px;
+			flex: none;
+		}
+		/* No display:none resting state here on purpose. The educator option is
+		   checked by default, so the grades block ships visible and the JS below
+		   toggles it with an explicit 'none'/'block' — never '' (gotcha #22). */
 		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-grades {
 			display: flex;
 			flex-wrap: wrap;
@@ -374,14 +429,30 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 					</div>
 				</div>
 
-				<label class="lxp-tsu-label"><?php echo $grades_label; ?></label>
-				<div class="lxp-tsu-grades">
-					<?php foreach ( $grades as $grade ) : ?>
-						<label>
-							<input type="checkbox" class="lxp-tsu-grade" value="<?php echo esc_attr( $grade ); ?>" />
-							<?php echo esc_html( $grade ); ?>
-						</label>
-					<?php endforeach; ?>
+				<label class="lxp-tsu-label"><?php echo $register_type_label; ?></label>
+				<div class="lxp-tsu-regtype">
+					<?php // The name is $uid-prefixed: two copies of this widget on one page
+					      // would otherwise share a single radio group. ?>
+					<label>
+						<input type="radio" name="<?php echo esc_attr( $uid ); ?>-regtype" class="lxp-tsu-regtype-opt" value="<?php echo esc_attr( TL_REGISTER_TYPE_K12 ); ?>" checked />
+						<span><?php echo $register_type_k12; ?></span>
+					</label>
+					<label>
+						<input type="radio" name="<?php echo esc_attr( $uid ); ?>-regtype" class="lxp-tsu-regtype-opt" value="<?php echo esc_attr( TL_REGISTER_TYPE_PD ); ?>" />
+						<span><?php echo $register_type_pd; ?></span>
+					</label>
+				</div>
+
+				<div class="lxp-tsu-grades-wrap">
+					<label class="lxp-tsu-label"><?php echo $grades_label; ?></label>
+					<div class="lxp-tsu-grades">
+						<?php foreach ( $grades as $grade ) : ?>
+							<label>
+								<input type="checkbox" class="lxp-tsu-grade" value="<?php echo esc_attr( $grade ); ?>" />
+								<?php echo esc_html( $grade ); ?>
+							</label>
+						<?php endforeach; ?>
+					</div>
 				</div>
 
 				<button type="submit" class="lxp-tsu-btn"><?php echo $button_label; ?></button>
@@ -407,6 +478,27 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 				btn.removeAttribute('disabled');
 			}
 
+			var K12 = <?php echo wp_json_encode( TL_REGISTER_TYPE_K12 ); ?>;
+
+			function registerType() {
+				var picked = root.querySelector('.lxp-tsu-regtype-opt:checked');
+				return picked ? picked.value : K12;
+			}
+
+			// Explicit 'block'/'none', never '' — clearing the inline style would
+			// hand control back to the stylesheet (gotcha #22).
+			var gradesWrap = root.querySelector('.lxp-tsu-grades-wrap');
+
+			function syncGrades() {
+				if (!gradesWrap) return;
+				gradesWrap.style.display = (registerType() === K12) ? 'block' : 'none';
+			}
+
+			Array.prototype.slice.call(root.querySelectorAll('.lxp-tsu-regtype-opt'))
+				.forEach(function(radio) { radio.addEventListener('change', syncGrades); });
+
+			syncGrades();
+
 			function errorText(r) {
 				var d = r.json && r.json.data;
 				if (typeof d === 'string') { return d; }
@@ -431,11 +523,16 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 					return;
 				}
 
-				var grades = Array.prototype.slice
-					.call(root.querySelectorAll('.lxp-tsu-grade:checked'))
-					.map(function(cb) { return cb.value; });
+				// A Professional Development registrant is never asked for grades,
+				// so anything still checked from before the toggle is discarded.
+				var regType = registerType();
+				var grades  = (regType === K12)
+					? Array.prototype.slice
+						.call(root.querySelectorAll('.lxp-tsu-grade:checked'))
+						.map(function(cb) { return cb.value; })
+					: [];
 
-				if (!grades.length) {
+				if (regType === K12 && !grades.length) {
 					fail('Please choose at least one grade you teach.');
 					return;
 				}
@@ -450,6 +547,7 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 				body.append('lxp_user_email', root.querySelector('.lxp-tsu-email').value);
 				body.append('lxp_user_password', pass);
 				body.append('lxp_user_password_confirm', pass2);
+				body.append('teacher_register_type', regType);
 				grades.forEach(function(g) { body.append('grades[]', g); });
 
 				fetch(signupUrl, {

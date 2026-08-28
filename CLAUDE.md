@@ -98,6 +98,8 @@ wp rest route list --namespace=lms/v1 --fields=route,methods
 | 23 | Never `get_post_meta(…, 'lxp_class_max_seats')` directly. Seats are capped at `TL_CLASS_MAX_SEATS` (150) and `0` is a **legacy "unlimited" sentinel** still stored on pre-cap classes — a raw read gives you `0` and every `$max > 0 &&` guard silently turns back into "no cap". Read via `lxp_get_class_max_seats()`, write via `lxp_clamp_class_max_seats()` (both in `lms/tl-constants.php`, for gotcha #19's reason). There is no migration and none is needed. |
 | 24 | `TL_Teacher_Access` (`includes/class-tiny-lxp-teacher-access.php`) registers its hooks **itself**, not through `Tiny_LXP_Platform_Loader` — that is deliberate and contradicts the hook-routing rule above. The loader only runs when `Tiny_LXP_Platform::isOK()` passes, so routing it there would hand teachers wp-admin back the moment an unrelated dependency check failed. It fails **open** for administrators (`manage_options`) on purpose: locking an admin out of wp-admin is not recoverable from the front end. |
 | 25 | `class-roster-modal.php` reloads the page on `hidden.bs.modal` — closing the Roster modal (Bootstrap 5's `hide.bs.modal`/`hidden.bs.modal` pair, fired by the X, backdrop click, or Escape, not just an explicit button) always refreshes `/classes` so the class list's seats-used count picks up whatever changed, including students who joined live via code while the modal was open. `hide.bs.modal` is where the existing dirty-name-edit confirm lives; it now also gates the reload via `e.preventDefault()`, so add any *other* "block the close" check there too, not on `hidden.bs.modal` (that one no longer fires if `hide` was prevented). |
+| 26 | `TL_LearnPress_Course_Extension::save_course_audience_terms()` writes the `K-12` / `Professional Development` terms with `wp_set_object_terms( …, $append = true )` **plus** a `wp_remove_object_terms()` for the unticked ones. That is not redundant. Those two terms live in LearnPress's shared `course_category` taxonomy alongside subject categories (Math, Science, …), and `wp_set_object_terms()` defaults to `$append = false` — collapsing this into one replacing call silently wipes every other category off the course. Same reason the audience filter in `get_available_courses()` uses `NOT IN` on the *other* term rather than `NOT EXISTS`: `NOT EXISTS` means "has no `course_category` at all", so it would hide a course tagged only `Math`. |
+| 27 | The signup widget's grades block ships **visible** and carries no `display:none` in the stylesheet, because the K-12 radio is checked by default. Its JS toggles it with an explicit `'block'`/`'none'` — the mirror image of gotcha #22, and it must stay that way: give the wrapper a stylesheet `display:none` resting state and the `'block'` assignment still works, but any future `= ''` shorthand would hide it permanently. |
 
 ---
 
@@ -148,7 +150,20 @@ The form collects first/last name, email, password + confirm, and grades — **n
 
 **Prerequisite**: the configured school must have `lxp_school_district_id` set, or signup is refused. `teacher-classes.php` reads the district post's meta, so a district-less school would strand the teacher on their own landing page.
 
-Creates, as one unit with compensating deletes on failure: a WP user (role `lp_teacher`, `user_login` = email) **and** a `tl_teacher` post (`lxp_teacher_admin_id`, `lxp_teacher_school_id`, `grades` JSON, `settings_active`). Both halves are mandatory — `teacher-dashboard.php` hard-`die()`s for an `lp_teacher` user with no `tl_teacher` post.
+Creates, as one unit with compensating deletes on failure: a WP user (role `lp_teacher`, `user_login` = email) **and** a `tl_teacher` post (`lxp_teacher_admin_id`, `lxp_teacher_school_id`, `grades` JSON, `teacher_register_type`, `settings_active`). Both halves are mandatory — `teacher-dashboard.php` hard-`die()`s for an `lp_teacher` user with no `tl_teacher` post.
+
+### Register type
+
+The form asks **how** the teacher is registering, and the answer drives two things.
+
+| Value | Meaning | Grades | Courses offered |
+|---|---|---|---|
+| `k12` (default, preselected) | An educator registering students | Asked; at least one required | Courses tagged `K-12`, plus untagged |
+| `professional_development` | An administrator registering faculty/staff | Not asked; forced to `[]` | Courses tagged `Professional Development`, plus untagged |
+
+Stored as `teacher_register_type` on the `tl_teacher` post. **Never read that meta directly** — every teacher created before this feature has no meta at all. Read via `lxp_get_teacher_register_type()`, validate submitted values with `lxp_sanitize_register_type()` (both in `lms/tl-constants.php`, for gotcha #19's reason); both resolve anything unknown to `k12`.
+
+The course side is two terms in **LearnPress's own `course_category` taxonomy** (slugs `k-12` and `professional-development`, `lxp_get_course_audience_terms()`), created idempotently by `tl_lxp_maybe_install_course_audience_terms()` on `init` priority 20 — not on activation, because LearnPress registers the taxonomy on `init` and the plugin is already active on running sites. Course authors tick them in the **Curriki Audience** meta box on the course edit screen. `Rest_Lxp_Class::get_available_courses()` filters on an optional `teacher_id` param; without it the response is the full unfiltered catalogue, as before.
 
 Distinct from `Rest_Lxp_Teacher::create()` (the admin path), which takes `teacher_school_id` straight from the request with no capability check — never expose that one publicly.
 
