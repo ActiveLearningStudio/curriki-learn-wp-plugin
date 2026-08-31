@@ -123,7 +123,7 @@ const TL_COURSE_AUDIENCE_TAXONOMY = 'course_category';
 if ( ! function_exists( 'lxp_get_course_audience_terms' ) ) {
     function lxp_get_course_audience_terms() {
         return array(
-            TL_COURSE_AUDIENCE_K12 => array( 'slug' => 'k-12', 'name' => 'K-12', 'short' => 'Student' ),
+            TL_COURSE_AUDIENCE_K12 => array( 'slug' => 'k-12', 'name' => 'K-12', 'short' => 'Students' ),
             TL_COURSE_AUDIENCE_PD  => array( 'slug' => 'professional-development', 'name' => 'Professional Development', 'short' => 'PD' ),
         );
     }
