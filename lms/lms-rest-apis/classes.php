@@ -273,39 +273,13 @@ class Rest_Lxp_Class
 			Rest_Lxp_Class_Redemption::reconcile_class_student_meta($class_post_id);
 		}
 
-		// The Courses picker only renders checkboxes for courses this teacher's
-		// audience can see, so course_ids[] describes that slice and nothing
-		// else. Rebuilding the meta from it alone would silently drop any course
-		// assigned outside the slice — an untagged one, or one tagged for the
-		// other audience — on an ordinary save such as a rename. That is gotcha
-		// #17's student-wipe in another guise, and it is reachable the moment
-		// strict audience filtering is on. Carry the invisible assignments over.
-		$preserved  = array();
-		$audience   = self::audience_tax_query($request->get_param('class_teacher_id'));
-		$assigned   = get_post_meta($class_post_id, 'lxp_class_course_ids');
-
-		if (null !== $audience && !empty($assigned)) {
-			$visible = get_posts(array(
-				'post_type'      => TL_COURSE_CPT,
-				'posts_per_page' => -1,
-				'post_status'    => 'publish',
-				'fields'         => 'ids',
-				'tax_query'      => $audience,
-			));
-			$visible = array_map('absint', (array) $visible);
-
-			foreach ($assigned as $assigned_id) {
-				if (!in_array(absint($assigned_id), $visible, true)) {
-					$preserved[] = absint($assigned_id);
-				}
-			}
-		}
-
+		// The picker renders every published course, so course_ids[] is the whole
+		// set and a straight rebuild loses nothing.
 		delete_post_meta($class_post_id, 'lxp_class_course_ids');
 		$course_ids = $request->get_param('course_ids');
 		$course_ids = is_array($course_ids) ? array_map('absint', $course_ids) : array();
 
-		foreach (array_unique(array_merge($preserved, $course_ids)) as $course_id) {
+		foreach (array_unique($course_ids) as $course_id) {
 			add_post_meta($class_post_id, 'lxp_class_course_ids', $course_id);
 		}
 
@@ -493,74 +467,46 @@ class Rest_Lxp_Class
 	}
 
 	/**
-	 * The tax_query restricting courses to one teacher's audience, or null when
-	 * no restriction applies.
+	 * Every published course, each tagged with the audience badges it carries.
 	 *
-	 * Strict one-to-one mapping: only courses carrying this teacher's own
-	 * audience term. A course tagged with neither term reaches nobody, and one
-	 * tagged with both reaches both teacher types.
-	 *
-	 * Returns null — meaning "no filtering", the full catalogue — in two cases,
-	 * neither of which is an oversight:
-	 *
-	 * No teacher id: the available-courses route is public and the caller is
-	 * unattributed, so there is no audience to map to. Both class modals always
-	 * send it. Do not tighten this into returning nothing.
-	 *
-	 * Taxonomy missing: LearnPress is deactivated, so the tagging infrastructure
-	 * itself is gone. That is an infrastructure failure, not a tagging state —
-	 * an empty list would look to a teacher like the admin's course tagging had
-	 * been wiped.
-	 *
-	 * @param  mixed $teacher_id tl_teacher post ID.
-	 * @return array|null
-	 */
-	private static function audience_tax_query($teacher_id) {
-		$teacher_id = absint($teacher_id);
-
-		if ($teacher_id <= 0 || !taxonomy_exists(TL_COURSE_AUDIENCE_TAXONOMY)) {
-			return null;
-		}
-
-		$terms = lxp_get_course_audience_terms();
-
-		return array(
-			array(
-				'taxonomy' => TL_COURSE_AUDIENCE_TAXONOMY,
-				'field'    => 'slug',
-				'terms'    => $terms[lxp_get_teacher_register_type($teacher_id)]['slug'],
-			),
-		);
-	}
-
-	/**
-	 * Courses offerable to a teacher, filtered by how that teacher registered.
-	 *
-	 * The mapping is strict: a k12 teacher sees only courses tagged K-12, a
-	 * professional_development teacher only those tagged Professional
-	 * Development. An untagged course reaches nobody.
-	 *
-	 * `teacher_id` is optional — see audience_tax_query() for what happens
-	 * without it.
+	 * The catalogue is deliberately unfiltered — every teacher is offered every
+	 * course. The Curriki Audience terms do not gate anything; they only supply
+	 * the `Student` / `PD` badge the picker shows beside the title, so a teacher
+	 * can tell at a glance who a course is written for. A course carrying
+	 * neither term is still offered, just without a badge.
 	 */
 	public static function get_available_courses($request) {
-		$args = array(
+		$courses = get_posts(array(
 			'post_type'      => TL_COURSE_CPT,
 			'posts_per_page' => -1,
 			'post_status'    => 'publish',
 			'orderby'        => 'title',
 			'order'          => 'ASC',
-		);
+		));
 
-		$tax_query = self::audience_tax_query($request->get_param('teacher_id'));
-		if (null !== $tax_query) {
-			$args['tax_query'] = $tax_query;
-		}
+		// No LearnPress, no course_category taxonomy — every course reports no
+		// badges rather than warning its way through get_the_terms().
+		$terms = taxonomy_exists(TL_COURSE_AUDIENCE_TAXONOMY) ? lxp_get_course_audience_terms() : array();
 
-		$courses = get_posts($args);
-		$result = array_map(function($c) {
-			return array('ID' => $c->ID, 'post_title' => $c->post_title);
+		$result = array_map(function($c) use ($terms) {
+			$audience = array();
+
+			if (!empty($terms)) {
+				// get_the_terms() reads the term cache WP_Query already primed
+				// for this post type, so this is not a query per course.
+				$assigned = get_the_terms($c->ID, TL_COURSE_AUDIENCE_TAXONOMY);
+				$assigned = is_array($assigned) ? wp_list_pluck($assigned, 'slug') : array();
+
+				foreach ($terms as $term) {
+					if (in_array($term['slug'], $assigned, true)) {
+						$audience[] = $term['short'];
+					}
+				}
+			}
+
+			return array('ID' => $c->ID, 'post_title' => $c->post_title, 'audience' => $audience);
 		}, $courses);
+
 		return wp_send_json_success(array('courses' => $result));
 	}
 

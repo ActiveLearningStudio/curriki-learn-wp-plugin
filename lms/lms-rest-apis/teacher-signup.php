@@ -78,9 +78,8 @@ class Rest_Lxp_Teacher_Signup {
 		$pass2  = (string) $request->get_param( 'lxp_user_password_confirm' );
 		$grades = $request->get_param( 'grades' );
 
-		// Anything unrecognised (including a missing param, i.e. a client that
-		// predates this field) resolves to the K-12 educator path.
-		$register_type = lxp_sanitize_register_type( $request->get_param( 'teacher_register_type' ) );
+		// A plain opt-in tick. Absent (an older client) reads as unticked.
+		$pd = ( '1' === (string) $request->get_param( 'teacher_professional_development' ) );
 
 		if ( '' === trim( $first ) || '' === trim( $last ) ) {
 			return self::reject( 'bad_name', __( 'Please enter both your first and last name.', 'tinylxp' ) );
@@ -115,12 +114,11 @@ class Rest_Lxp_Teacher_Signup {
 
 		$grades = self::sanitize_grades( $grades );
 
-		if ( TL_REGISTER_TYPE_PD === $register_type ) {
-			// The form hides the grade checkboxes for this path, so anything that
-			// still arrived was stale or hand-crafted. Drop it rather than store it.
-			$grades = array();
-		} elseif ( empty( $grades ) ) {
-			return self::reject( 'bad_grades', __( 'Please choose at least one grade you teach.', 'tinylxp' ) );
+		// The teacher has to tell us something about what they teach, but the PD
+		// tick counts on its own — an administrator registering faculty has no
+		// grade to claim. Only a wholly empty selection is refused.
+		if ( empty( $grades ) && ! $pd ) {
+			return self::reject( 'bad_grades', __( 'Please choose at least one grade you teach, or tick Professional Development.', 'tinylxp' ) );
 		}
 
 		// --- Server-side placement -------------------------------------------
@@ -138,7 +136,7 @@ class Rest_Lxp_Teacher_Signup {
 			return self::reject( 'school_no_district', __( 'Teacher signup is not configured correctly. Please contact the site administrator.', 'tinylxp' ) );
 		}
 
-		$result = self::provision_teacher( $first, $last, $email, $pass, $grades, (int) $school->ID, $register_type );
+		$result = self::provision_teacher( $first, $last, $email, $pass, $grades, (int) $school->ID, $pd );
 
 		if ( is_wp_error( $result ) ) {
 			return self::reject( 'create_failed', __( 'We could not create your account. Please try again.', 'tinylxp' ) );
@@ -186,10 +184,10 @@ class Rest_Lxp_Teacher_Signup {
 	 * @param  string   $pass
 	 * @param  string[] $grades
 	 * @param  int      $school_id
-	 * @param  string   $register_type TL_REGISTER_TYPE_K12 or TL_REGISTER_TYPE_PD.
+	 * @param  bool     $pd Whether Professional Development was ticked.
 	 * @return array{user_id:int,teacher_id:int}|WP_Error
 	 */
-	private static function provision_teacher( $first, $last, $email, $pass, $grades, $school_id, $register_type = TL_REGISTER_TYPE_K12 ) {
+	private static function provision_teacher( $first, $last, $email, $pass, $grades, $school_id, $pd = false ) {
 		// "Last, First" matches Rest_Lxp_Teacher::create() so both paths produce
 		// records that sort and read identically in the teacher lists.
 		$display_name = wp_strip_all_tags( $last . ', ' . $first );
@@ -225,11 +223,11 @@ class Rest_Lxp_Teacher_Signup {
 
 		update_post_meta( $teacher_post_id, 'lxp_teacher_admin_id', $user_id );
 		update_post_meta( $teacher_post_id, 'lxp_teacher_school_id', $school_id );
-		// Still JSON-encoded for the PD path, so this reads "[]" rather than "".
+		// Still JSON-encoded when empty, so this reads "[]" rather than "".
 		// Rest_Lxp_Class::save_class_grades() json_decode()s this meta; "[]"
 		// decodes to an empty array where "" would decode to null.
 		update_post_meta( $teacher_post_id, 'grades', wp_json_encode( $grades ) );
-		update_post_meta( $teacher_post_id, 'teacher_register_type', $register_type );
+		update_post_meta( $teacher_post_id, 'teacher_professional_development', $pd ? '1' : '0' );
 		update_post_meta( $teacher_post_id, 'settings_active', '1' );
 
 		return array(

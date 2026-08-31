@@ -191,18 +191,20 @@
         let apiUrl = host + '/wp-json/lms/v1/';
         $.ajax({
             method: "POST",
-            url: apiUrl + "class/available-courses",
-            // The endpoint filters the catalogue by how this teacher registered
-            // (K-12 vs Professional Development). Omitting it returns everything.
-            data: { teacher_id: jQuery("#class_teacher_id").val() }
+            url: apiUrl + "class/available-courses"
         }).done(function(response) {
             var courses = response.data.courses;
             var html = '';
             courses.forEach(function(course) {
+                // Badge text comes from a fixed server-side list (Student / PD),
+                // never from user input, so it needs no escaping here.
+                var badges = (course.audience || []).map(function(a) {
+                    return '<span class="lxp-course-audience">' + a + '</span>';
+                }).join('');
                 html += '<div class="dropdown-item dropdown-item2 dd-button">';
                 html += '<div class="time-date-box class-class-box">';
                 html += '<input class="form-check-input select-course-check" type="checkbox" value="' + course.ID + '" name="course_ids[]" />';
-                html += '<div class="tags-body-detail"><p class="class-name">' + course.post_title + '</p></div>';
+                html += '<div class="tags-body-detail"><p class="class-name">' + course.post_title + badges + '</p></div>';
                 html += '</div></div>';
             });
             jQuery("#courses-list").html(html);

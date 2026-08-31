@@ -496,7 +496,7 @@ All in `Rest_Lxp_Class` (`lms/lms-rest-apis/classes.php`):
 
 | Method | Route | Callback | Purpose |
 |---|---|---|---|
-| `POST` | `/wp-json/lms/v1/class/available-courses` | `get_available_courses()` | Returns all published `lp_course` posts (`{ID, post_title}`) for the modal picker |
+| `POST` | `/wp-json/lms/v1/class/available-courses` | `get_available_courses()` | Returns all published `lp_course` posts (`{ID, post_title, audience}`) for the modal picker; `audience` holds the `Student` / `PD` badge labels |
 | `POST` | `/wp-json/lms/v1/class/courses` | `get_class_courses()` | Returns courses currently assigned to a class (`{ID, post_title, permalink}`) |
 | `POST` | `/wp-json/lms/v1/class/courses/save` | `save_class_courses()` | Replaces all assigned courses for a class; params: `class_id`, `course_ids[]` |
 

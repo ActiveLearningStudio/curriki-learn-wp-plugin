@@ -51,7 +51,7 @@ All endpoints are in `Rest_Lxp_Class` (`lms/lms-rest-apis/classes.php`) and use 
 
 | Method | Route | Params | Returns |
 |---|---|---|---|
-| `POST` | `/wp-json/lms/v1/class/available-courses` | _(none)_ | All published `lp_course` posts as `{ data: { courses: [{ID, post_title}] } }` |
+| `POST` | `/wp-json/lms/v1/class/available-courses` | _(none)_ | All published `lp_course` posts as `{ data: { courses: [{ID, post_title, audience}] } }`, where `audience` is the course's `Student` / `PD` badge labels (possibly empty) |
 | `POST` | `/wp-json/lms/v1/class/courses` | `class_id` | Courses assigned to the class as `{ data: { courses: [{ID, post_title, permalink}] } }` |
 | `POST` | `/wp-json/lms/v1/class/courses/save` | `class_id`, `course_ids[]` | Replaces the full set of assigned courses; returns `"Courses Saved!"` on success |
 
