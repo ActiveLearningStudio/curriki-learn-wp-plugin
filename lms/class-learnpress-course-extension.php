@@ -183,7 +183,7 @@ class TL_LearnPress_Course_Extension {
 		wp_nonce_field( 'save_lxp_course_audience', 'lxp_course_audience_nonce' );
 		?>
 		<p style="margin-top:0;">
-			<?php echo esc_html__( 'Which teachers may assign this course to a class.', 'tiny-lxp-platform' ); ?>
+			<?php echo esc_html__( 'Who this course is written for.', 'tiny-lxp-platform' ); ?>
 		</p>
 		<?php foreach ( lxp_get_course_audience_terms() as $term ) : ?>
 			<p style="margin:0 0 6px;">
@@ -194,7 +194,7 @@ class TL_LearnPress_Course_Extension {
 			</p>
 		<?php endforeach; ?>
 		<p style="margin-top:8px;color:#666;">
-			<?php echo esc_html__( 'Tick at least one — a course with neither ticked is not offered to any teacher.', 'tiny-lxp-platform' ); ?>
+			<?php echo esc_html__( 'These add a Student or PD label beside the course title when a teacher picks courses for a class. They do not restrict who can assign it — leaving both unticked simply shows no label.', 'tiny-lxp-platform' ); ?>
 		</p>
 		<?php
 	}
