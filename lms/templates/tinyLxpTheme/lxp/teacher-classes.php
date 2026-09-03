@@ -119,8 +119,8 @@
         <div class="heading-wrapper">
             <div class="heading-left">
                 <div class="welcome-content">
-                    <h2 class="welcome-heading">Classes</h2>
-                    <p class="welcome-text">Student enrollment and registration management</p>
+                    <h2 class="welcome-heading">My Virtual Classroom</h2>
+                    <p class="welcome-text">Create and manage classes and share courses with learners.</p>
                 </div>
             </div>
 
@@ -144,7 +144,7 @@
                                 <tr>
                                     <th class="">
                                         <div class="th1">
-                                            Class
+                                            My Classes
                                             <img src="<?php echo $treks_src; ?>/assets/img/showing.svg" alt="logo" />
                                         </div>
                                     </th>
