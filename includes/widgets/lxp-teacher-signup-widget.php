@@ -244,7 +244,7 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 		#<?php echo esc_attr( $uid ); ?> {
 			max-width: <?php echo $max_width; ?>;
 			margin: 0 auto;
-			padding: 24px;
+			padding: 0 24px;
 			background: <?php echo $bg; ?>;
 			color: <?php echo $text_col; ?>;
 			border-radius: 8px;
@@ -346,11 +346,19 @@ class LXP_Teacher_Signup_Widget extends \Elementor\Widget_Base {
 			cursor: default;
 		}
 		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-msg {
+			/* Empty at rest — the msg div is always in the DOM (aria-live needs a
+			   stable node to announce into), but it should take up no space until
+			   JS puts text in it. :empty is what makes that automatic: no extra
+			   class to toggle, and it recovers on its own if the text is ever
+			   cleared back to ''. */
+			display: none;
 			font-size: 14px;
 			line-height: 1.4;
-			min-height: 20px;
 			margin-top: 12px;
 			color: #d93025;
+		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-tsu-msg:not(:empty) {
+			display: block;
 		}
 		</style>
 
