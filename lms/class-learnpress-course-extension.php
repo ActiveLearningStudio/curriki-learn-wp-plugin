@@ -99,6 +99,7 @@ class TL_LearnPress_Course_Extension {
 	public function add_meta_boxes() {
 		$this->course_outcome_metabox();
 		$this->course_audience_metabox();
+		$this->course_certificate_metabox();
 	}
 
 	public function course_outcome_metabox() {
@@ -250,6 +251,144 @@ class TL_LearnPress_Course_Extension {
 		if ( ! empty( $unchecked ) ) {
 			wp_remove_object_terms( $post_id, $unchecked, TL_COURSE_AUDIENCE_TAXONOMY );
 		}
+	}
+
+	public function course_certificate_metabox() {
+		$this->add_meta_box( array(
+			'lxp-course-certificate',
+			esc_html__( 'Curriki Certificate', 'tiny-lxp-platform' ),
+			array( $this, 'course_certificate_metabox_html' ),
+			TL_COURSE_CPT,
+			'side',
+			'default',
+		) );
+	}
+
+	public function course_certificate_metabox_html( $post = null ) {
+		$enabled  = false;
+		$subtitle = '';
+		if ( $post && isset( $post->ID ) ) {
+			$enabled  = '1' === (string) get_post_meta( $post->ID, TL_Certificate_Repository::META_ENABLED, true );
+			$subtitle = (string) get_post_meta( $post->ID, TL_Certificate_Repository::META_SUBTITLE, true );
+		}
+
+		wp_nonce_field( 'save_lxp_course_certificate', 'lxp_course_certificate_nonce' );
+		?>
+		<p style="margin-top:0;">
+			<label>
+				<input type="checkbox" name="lxp_course_issue_certificate" value="1" <?php checked( $enabled ); ?> />
+				<?php echo esc_html__( 'Issue certificate', 'tiny-lxp-platform' ); ?>
+			</label>
+		</p>
+		<p>
+			<label for="lxp_course_certificate_subtitle"><strong><?php echo esc_html__( 'Certificate subtitle', 'tiny-lxp-platform' ); ?></strong></label>
+			<input type="text" id="lxp_course_certificate_subtitle" name="lxp_course_certificate_subtitle" value="<?php echo esc_attr( $subtitle ); ?>" style="width:100%;" placeholder="<?php echo esc_attr__( 'A free AI course from Curriki AI Grants', 'tiny-lxp-platform' ); ?>" />
+		</p>
+		<p style="margin-top:8px;color:#666;">
+			<?php echo esc_html__( 'Learners who finish and pass this course are sent to the certificate page set under Curriki Learn → Certificates. The subtitle prints under the course title; leave it blank to use the widget default.', 'tiny-lxp-platform' ); ?>
+		</p>
+		<?php
+	}
+
+	public function save_course_certificate_meta( $post_id = null, $post = null ) {
+		$post_id = absint( $post_id );
+		if ( $post_id <= 0 ) {
+			return;
+		}
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+		if ( empty( $post ) || ! isset( $post->post_type ) || $post->post_type !== TL_COURSE_CPT ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+		if ( ! isset( $_POST['lxp_course_certificate_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['lxp_course_certificate_nonce'] ) ), 'save_lxp_course_certificate' ) ) {
+			return;
+		}
+
+		if ( ! empty( $_POST['lxp_course_issue_certificate'] ) ) {
+			update_post_meta( $post_id, TL_Certificate_Repository::META_ENABLED, '1' );
+		} else {
+			delete_post_meta( $post_id, TL_Certificate_Repository::META_ENABLED );
+		}
+
+		$subtitle = isset( $_POST['lxp_course_certificate_subtitle'] )
+			? sanitize_text_field( wp_unslash( $_POST['lxp_course_certificate_subtitle'] ) )
+			: '';
+
+		if ( '' === $subtitle ) {
+			delete_post_meta( $post_id, TL_Certificate_Repository::META_SUBTITLE );
+		} else {
+			update_post_meta( $post_id, TL_Certificate_Repository::META_SUBTITLE, $subtitle );
+		}
+	}
+
+	/**
+	 * Certificate page URL waiting to replace LearnPress's post-finish redirect.
+	 *
+	 * @var string
+	 */
+	private static $certificate_redirect = '';
+
+	/**
+	 * learn-press/user-course-finished — remember where to send the learner.
+	 *
+	 * LearnPress's own "redirect after finish" is one global setting (cached in
+	 * LP_Settings, so filtering the option is unreliable). Instead we note the
+	 * certificate URL here and swap it in on the wp_redirect() that
+	 * LP_AJAX::finish_course() makes immediately afterwards. Unflagged courses
+	 * never set it, so their redirect is untouched.
+	 */
+	public function on_course_finished( $course_id = 0, $user_id = 0 ) {
+		$repo = new TL_Certificate_Repository();
+		if ( ! $repo->is_eligible( $user_id, $course_id, true ) ) {
+			return;
+		}
+
+		self::$certificate_redirect = $repo->get_page_url( $course_id );
+	}
+
+	/**
+	 * wp_redirect — one-shot swap to the certificate page.
+	 */
+	public function filter_finish_redirect( $location ) {
+		if ( '' === self::$certificate_redirect ) {
+			return $location;
+		}
+
+		$location                   = self::$certificate_redirect;
+		self::$certificate_redirect = '';
+
+		return $location;
+	}
+
+	/**
+	 * learn-press/course-buttons — "Get Certificate" for an eligible learner,
+	 * so the certificate stays reachable after the post-finish redirect.
+	 */
+	public function render_certificate_button() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+
+		$course_id = get_the_ID();
+		$repo      = new TL_Certificate_Repository();
+		if ( ! $course_id || ! $repo->is_eligible( get_current_user_id(), $course_id ) ) {
+			return;
+		}
+
+		$url = $repo->get_page_url( $course_id );
+		if ( '' === $url ) {
+			return;
+		}
+
+		printf(
+			'<a href="%s" class="lp-button lxp-get-certificate">%s</a>',
+			esc_url( $url ),
+			esc_html__( 'Get Certificate', 'tiny-lxp-platform' )
+		);
 	}
 
 	public function modify_list_row_actions($actions, $post) {
