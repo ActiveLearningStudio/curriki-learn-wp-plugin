@@ -264,6 +264,9 @@ class LXP_Student_Courses_Widget extends \Elementor\Widget_Base {
 		#<?php echo esc_attr( $uid ); ?> .lxp-course-card__btn:hover {
 			text-decoration: underline;
 		}
+		#<?php echo esc_attr( $uid ); ?> .lxp-course-card__btn--certificate {
+			margin-right: 16px;
+		}
 		</style>
 
 		<?php
@@ -280,7 +283,8 @@ class LXP_Student_Courses_Widget extends \Elementor\Widget_Base {
 		if ( empty( $course_ids ) ) {
 			echo '<p>' . esc_html__( 'No courses assigned to this class yet.', 'tinylxp' ) . '</p>';
 		} else {
-			$ci = 0;
+			$ci           = 0;
+			$certificates = new \TL_Certificate_Repository();
 			foreach ( $course_ids as $cid ) {
 				if ( ! isset( $courses_by_id[ $cid ] ) ) {
 					continue;
@@ -307,6 +311,14 @@ class LXP_Student_Courses_Widget extends \Elementor\Widget_Base {
 						<span class="lxp-course-card__meta"><?php echo esc_html( $lesson_count . ' ' . $noun ); ?></span>
 					</div>
 					<div class="lxp-course-card__footer">
+						<?php
+						$certificate_url = $certificates->is_eligible( get_current_user_id(), $cp->ID ) ? $certificates->get_page_url( $cp->ID ) : '';
+						if ( '' !== $certificate_url ) :
+							?>
+							<a href="<?php echo esc_url( $certificate_url ); ?>" class="lxp-course-card__btn lxp-course-card__btn--certificate">
+								<?php echo esc_html__( 'Certificate', 'tinylxp' ); ?>
+							</a>
+						<?php endif; ?>
 						<a href="<?php echo esc_url( get_permalink( $cp->ID ) ); ?>" class="lxp-course-card__btn">
 							<?php echo $open_label; ?>
 						</a>

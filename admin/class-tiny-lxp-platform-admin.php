@@ -367,6 +367,15 @@ class Tiny_LXP_Platform_Admin
             array( $this, 'teacher_signup_settings_page_html' )
         );
 
+        add_submenu_page(
+            'curriki-learn',
+            __( 'Certificates', 'tiny-lxp-platform' ),
+            __( 'Certificates', 'tiny-lxp-platform' ),
+            'manage_options',
+            'curriki-learn-certificates',
+            array( $this, 'certificate_settings_page_html' )
+        );
+
         // Remove the auto-created duplicate top-level submenu item.
         remove_submenu_page( 'curriki-learn', 'curriki-learn' );
     }
@@ -773,6 +782,15 @@ class Tiny_LXP_Platform_Admin
             'default'           => 0,
         ] );
 
+        // Course completion certificates — the page carrying the LXP Certificate
+        // widget. Its own group: options.php rewrites every option in a group
+        // that the submitted form leaves out, so sharing 'tiny-lxp-platform'
+        // would let saving this page reset the others (and vice versa).
+        register_setting( 'tl-certificate-settings', TL_Certificate_Repository::OPTION_PAGE, [
+            'sanitize_callback' => 'absint',
+            'default'           => 0,
+        ] );
+
         // Register a new setting for 'edlink' options
         register_setting('edlink_options_group', 'edlink_options');
         
@@ -1103,6 +1121,63 @@ class Tiny_LXP_Platform_Admin
             filterSchools();
         })();
         </script>
+        <?php
+    }
+
+    /**
+     * Curriki Learn -> Certificates.
+     *
+     * Picks the page learners land on after finishing a course flagged
+     * "Issue certificate". The certificate itself is rendered by the
+     * LXP Certificate Elementor widget placed on that page.
+     *
+     * @see TL_Certificate_Repository
+     */
+    public function certificate_settings_page_html()
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        settings_errors();
+
+        $page_id = absint(get_option(TL_Certificate_Repository::OPTION_PAGE, 0));
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html__('Certificates', 'tiny-lxp-platform'); ?></h1>
+            <p class="description">
+                <?php echo esc_html__('Learners who finish and pass a course with "Issue certificate" ticked are sent to the page selected here, where they add their name, email and school and download their certificate.', 'tiny-lxp-platform'); ?>
+            </p>
+
+            <form action="<?php echo esc_url('options.php'); ?>" method="post">
+                <?php settings_fields('tl-certificate-settings'); ?>
+                <table class="form-table" role="presentation">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><label for="tl_certificate_page_id"><?php echo esc_html__('Certificate page', 'tiny-lxp-platform'); ?></label></th>
+                            <td>
+                                <?php
+                                wp_dropdown_pages(array(
+                                    'name'              => TL_Certificate_Repository::OPTION_PAGE,
+                                    'id'                => 'tl_certificate_page_id',
+                                    'selected'          => $page_id,
+                                    'show_option_none'  => esc_html__('— Select a page —', 'tiny-lxp-platform'),
+                                    'option_none_value' => 0,
+                                ));
+                                ?>
+                                <p class="description"><?php echo esc_html__('Place the LXP Certificate Elementor widget on this page, and tick "Issue certificate" in the Curriki Certificate box on each course that should award one.', 'tiny-lxp-platform'); ?></p>
+                                <?php if ($page_id > 0 && 'publish' !== get_post_status($page_id)) : ?>
+                                    <div class="notice notice-warning inline" style="margin-top:8px">
+                                        <p><?php echo esc_html__('This page is not published, so learners will not be redirected to it.', 'tiny-lxp-platform'); ?></p>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php submit_button(); ?>
+            </form>
+        </div>
         <?php
     }
 

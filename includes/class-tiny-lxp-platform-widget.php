@@ -52,6 +52,7 @@ class Tiny_LXP_Widget
         require_once( __DIR__ . '/widgets/lxp-class-join-widget.php' );
         require_once( __DIR__ . '/widgets/lxp-bookmark-prompt-widget.php' );
         require_once( __DIR__ . '/widgets/lxp-teacher-signup-widget.php' );
+        require_once( __DIR__ . '/widgets/lxp-certificate-widget.php' );
 
         $widgets_manager->register( new \Edudeme\Elementor\LXP_Course_Widget() );
         $widgets_manager->register( new \Edudeme\Elementor\LXP_Course_HTML_Widget() );
@@ -67,11 +68,22 @@ class Tiny_LXP_Widget
         $widgets_manager->register( new \Edudeme\Elementor\LXP_Class_Join_Widget() );
         $widgets_manager->register( new \Edudeme\Elementor\LXP_Bookmark_Prompt_Widget() );
         $widgets_manager->register( new \Edudeme\Elementor\LXP_Teacher_Signup_Widget() );
+        $widgets_manager->register( new \Edudeme\Elementor\LXP_Certificate_Widget() );
     }
 
     public function widget_dependencies($hook)
     {
         $plugin_path = plugins_url('widgets/assets', __FILE__);
+
+        // LXP Certificate — registered only; Elementor enqueues them through the
+        // widget's get_style_depends()/get_script_depends() on pages that use it.
+        wp_register_style('lxp-certificate', $plugin_path . '/style/lxp-certificate.css', [], $this->version);
+        // Third-party libs live in js/lib/, not js/vendor/ — .gitignore's bare
+        // "vendor/" rule (meant for Composer) would silently drop them from git.
+        wp_register_script('lxp-html2canvas', $plugin_path . '/js/lib/html2canvas.min.js', [], '1.4.1', true);
+        wp_register_script('lxp-jspdf', $plugin_path . '/js/lib/jspdf.umd.min.js', [], '2.5.1', true);
+        wp_register_script('lxp-certificate', $plugin_path . '/js/lxp-certificate.js', ['lxp-html2canvas', 'lxp-jspdf'], $this->version, true);
+
         if (is_page('learner-assignments')) {
             wp_register_style( 'calendar',          plugins_url( 'widgets/assets/style/calendar.css', __FILE__ ) );
             wp_register_style( 'newAssignment',     plugins_url( 'widgets/assets/style/newAssignment.css', __FILE__ ) );

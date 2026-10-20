@@ -8,7 +8,8 @@ Class–Course association detail: [docs/class-course-association-context.md](do
 Student identity & access (Student ID login, class code, Student Courses/Access widgets): [docs/student-identity-and-access-context.md](docs/student-identity-and-access-context.md)  
 Zero-PII student enrollment (COPPA/FERPA token accounts, code redemption, claim links): [docs/student-privacy-zone-a-context.md](docs/student-privacy-zone-a-context.md)  
 Encrypted roster vault (client-side crypto, passphrase KDF, district escrow, CSV import): [docs/student-privacy-zone-b-context.md](docs/student-privacy-zone-b-context.md)  
-CSV student import detail: [docs/csv-student-import-context.md](docs/csv-student-import-context.md)
+CSV student import detail: [docs/csv-student-import-context.md](docs/csv-student-import-context.md)  
+Course completion certificates (flag, finish redirect, browser-captured PDF, strict design): [docs/certificate-context.md](docs/certificate-context.md)
 
 ---
 
