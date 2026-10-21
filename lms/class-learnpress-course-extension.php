@@ -268,7 +268,11 @@ class TL_LearnPress_Course_Extension {
 		$enabled  = false;
 		$subtitle = '';
 		if ( $post && isset( $post->ID ) ) {
-			$enabled  = '1' === (string) get_post_meta( $post->ID, TL_Certificate_Repository::META_ENABLED, true );
+			// Ticked by default on a brand-new course (auto-draft, never saved).
+			// Existing courses show their stored state — absent meta means "off",
+			// so this never quietly switches certificates on for older courses.
+			$enabled  = 'auto-draft' === $post->post_status
+				|| '1' === (string) get_post_meta( $post->ID, TL_Certificate_Repository::META_ENABLED, true );
 			$subtitle = (string) get_post_meta( $post->ID, TL_Certificate_Repository::META_SUBTITLE, true );
 		}
 

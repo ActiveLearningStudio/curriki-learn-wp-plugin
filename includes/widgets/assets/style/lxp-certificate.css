@@ -100,5 +100,10 @@
 .lxp-cert-notice p{margin:0;font-size:16px;color:var(--w1)}
 .lxp-cert-notice a{color:var(--b2);font-weight:600}
 .lxp-cert-notice p + p{margin-top:12px}
+.lxp-cert-help{max-width:1056px;margin:20px auto 0;background:#fff;border:1px solid var(--w4);border-left:4px solid var(--y1);border-radius:12px;padding:14px 20px}
+.lxp-cert-help p{margin:0;font-size:14px;line-height:1.5;color:var(--w1)}
+.lxp-cert-help a{color:var(--b2);font-weight:600;text-decoration:underline;overflow-wrap:anywhere}
+.lxp-cert-notice + .lxp-cert-help{max-width:640px}
+@media print{.lxp-cert-wrap .lxp-cert-help{display:none}}
 
 @media (max-width:600px){.lxp-cert-wrap{padding:16px}}

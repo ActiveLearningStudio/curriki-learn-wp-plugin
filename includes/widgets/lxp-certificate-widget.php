@@ -110,6 +110,20 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 			'default' => esc_html__( 'Complete this course to receive your certificate.', 'tinylxp' ),
 		] );
 
+		$this->add_control( 'help_text', [
+			'label'       => esc_html__( 'Help Note', 'tinylxp' ),
+			'type'        => Controls_Manager::TEXTAREA,
+			'default'     => esc_html__( 'Having trouble getting your certificate? Send an email to', 'tinylxp' ),
+			'separator'   => 'before',
+			'description' => esc_html__( 'Shown in a note box at the bottom of the widget, followed by the help email as a link. Leave both empty to hide the note.', 'tinylxp' ),
+		] );
+
+		$this->add_control( 'help_email', [
+			'label'   => esc_html__( 'Help Email', 'tinylxp' ),
+			'type'    => Controls_Manager::TEXT,
+			'default' => 'grants@curriki.org',
+		] );
+
 		$this->end_controls_section();
 	}
 
@@ -141,7 +155,7 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 				esc_html__( 'Please log in to view your certificate.', 'tinylxp' ),
 				esc_url( wp_login_url( $return_url ) ),
 				esc_html__( 'Log in', 'tinylxp' )
-			) );
+			), $settings );
 			return;
 		}
 
@@ -149,7 +163,7 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 		$repo      = new \TL_Certificate_Repository();
 
 		if ( ! $course || TL_COURSE_CPT !== $course->post_type || ! $repo->is_course_enabled( $course_id ) ) {
-			$this->render_notice( esc_html( $settings['not_available_text'] ) );
+			$this->render_notice( esc_html( $settings['not_available_text'] ), $settings );
 			return;
 		}
 
@@ -162,7 +176,7 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 				esc_html( $settings['not_complete_text'] ),
 				esc_url( get_permalink( $course_id ) ),
 				esc_html__( 'Go to the course', 'tinylxp' )
-			) );
+			), $settings );
 			return;
 		}
 
@@ -203,8 +217,29 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 		return 'Certificate - ' . ( '' !== $title ? $title : 'Course' ) . '.pdf';
 	}
 
-	private function render_notice( $html ) {
-		echo '<div class="lxp-cert-wrap"><div class="lxp-cert-notice"><p>' . wp_kses_post( $html ) . '</p></div></div>';
+	private function render_notice( $html, $settings ) {
+		echo '<div class="lxp-cert-wrap"><div class="lxp-cert-notice"><p>' . wp_kses_post( $html ) . '</p></div>';
+		$this->render_help_note( $settings );
+		echo '</div>';
+	}
+
+	/**
+	 * Support note at the bottom of the widget — outside .cert, so it never
+	 * reaches the PDF capture.
+	 */
+	private function render_help_note( $settings ) {
+		$text  = isset( $settings['help_text'] ) ? trim( (string) $settings['help_text'] ) : '';
+		$email = isset( $settings['help_email'] ) ? sanitize_email( $settings['help_email'] ) : '';
+		if ( '' === $text && '' === $email ) {
+			return;
+		}
+
+		echo '<div class="lxp-cert-help"><p>';
+		echo esc_html( $text );
+		if ( '' !== $email ) {
+			printf( ' <a href="%s">%s</a>', esc_url( 'mailto:' . $email ), esc_html( $email ) );
+		}
+		echo '</p></div>';
 	}
 
 	/**
@@ -262,6 +297,7 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 				<button type="button" class="lxp-cert-btn lxp-cert-btn--secondary" data-action="save"><?php echo esc_html( $settings['save_label'] ); ?></button>
 				<span class="lxp-cert-status" role="status" aria-live="polite"></span>
 			</div>
+			<?php $this->render_help_note( $settings ); ?>
 		</div>
 		<?php
 	}
