@@ -172,7 +172,9 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 
 		$this->render_certificate( $settings, [
 			'course_id' => $course_id,
-			'title'     => get_the_title( $course ),
+			// Not get_the_title(): it prepends "Private:" / "Protected:" for non-public
+			// courses, which must never print on a certificate.
+			'title'     => apply_filters( 'the_title', $course->post_title, $course->ID ),
 			'subtitle'  => '' !== $subtitle ? $subtitle : $settings['default_subtitle'],
 			'name'      => $details['name'],
 			'email'     => $details['email'],
@@ -227,7 +229,7 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
   <p class="lead l2">has successfully completed the</p>
   <div class="card">
     <div class="ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#084892" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg></div>
-    <div><h2><?php echo esc_html( $data['title'] ); ?></h2><p><?php echo esc_html( $data['subtitle'] ); ?></p></div>
+    <div class="card-text"><h2><?php echo esc_html( $data['title'] ); ?></h2><p><?php echo esc_html( $data['subtitle'] ); ?></p></div>
   </div>
   <label class="field row email"><input type="email" name="email" autocomplete="email" placeholder="name@school.org" value="<?php echo esc_attr( $data['email'] ); ?>"><span>Email address</span></label>
   <label class="field row school"><input type="text" name="school" autocomplete="organization" placeholder="Your school name" maxlength="150" value="<?php echo esc_attr( $data['school'] ); ?>"><span>School name</span></label>

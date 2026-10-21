@@ -60,6 +60,11 @@
 .lxp-cert-wrap .cert .ico{flex:none;width:68px;height:68px;border-radius:16px;background:var(--b5);display:flex;align-items:center;justify-content:center}
 .lxp-cert-wrap .cert .card h2{margin:0;font-size:30px;line-height:1.15;font-weight:700;color:var(--b2)}
 .lxp-cert-wrap .cert .card p{margin:6px 0 0;font-size:14px;color:var(--w1)}
+/* Not in the design (its sample title is short): keep long course titles
+   inside the fixed-height card. lxp-certificate.js steps the h2 font-size
+   down from the design's 30px until the text fits; these stop a single long
+   word from pushing past the card's right edge. */
+.lxp-cert-wrap .cert .card .card-text{min-width:0;overflow-wrap:anywhere}
 .lxp-cert-wrap .cert .row{top:640px}
 .lxp-cert-wrap .cert .row input,
 .lxp-cert-wrap .cert .row .lxp-cert-value{font-size:14px;font-weight:500;height:36px}

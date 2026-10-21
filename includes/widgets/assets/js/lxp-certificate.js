@@ -43,6 +43,28 @@
 		viewport.style.height = (CERT_H * scale) + 'px';
 	}
 
+	// The course card has a fixed height sized for a short title. Step the
+	// title's font-size down from the design's 30px until title + subtitle fit.
+	// Set inline, so the capture clone inherits the fitted size.
+	var TITLE_MAX = 30;
+	var TITLE_MIN = 14;
+	var CARD_GUTTER = 12; // breathing room above and below the text block
+
+	function fitCourseTitle(wrap) {
+		var card = wrap.querySelector('.cert .card');
+		var text = card && card.querySelector('.card-text');
+		var title = text && text.querySelector('h2');
+		if (!title) { return; }
+
+		var limit = card.clientHeight - CARD_GUTTER * 2;
+		var size = TITLE_MAX;
+		title.style.fontSize = size + 'px';
+		while (text.offsetHeight > limit && size > TITLE_MIN) {
+			size -= 1;
+			title.style.fontSize = size + 'px';
+		}
+	}
+
 	function field(wrap, name) {
 		return wrap.querySelector('.cert input[name="' + name + '"]');
 	}
@@ -170,6 +192,9 @@
 		wrap.setAttribute('data-lxp-cert-ready', '1');
 
 		fit(wrap);
+		fitCourseTitle(wrap);
+		// Re-measure once the certificate font is in — fallback-font metrics differ.
+		fontsReady().then(function () { fitCourseTitle(wrap); });
 		if (window.ResizeObserver) {
 			new ResizeObserver(function () { fit(wrap); }).observe(wrap);
 		} else {
