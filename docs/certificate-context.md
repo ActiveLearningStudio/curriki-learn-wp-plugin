@@ -104,7 +104,11 @@ The PDF is generated **in the browser**, not with dompdf. dompdf cannot render t
 2. Waits for the four font weights to load.
 3. Clones `.cert` into an off-screen, **unscaled** `.lxp-cert-capture-host`. Each `<input>` in the clone is replaced by a `.lxp-cert-value` div holding the live value, because html2canvas draws input values unreliably. The CSS gives those divs the inputs' exact box.
 4. Adds `.lxp-cert--capture`, which mirrors the design's `@media print` rules: no shadow, no corner radius.
-5. Captures at 3× with `html2canvas`, then writes the result as a JPEG onto an 11×8.5 in landscape jsPDF page and saves it as `{course-slug}-certificate.pdf`.
+5. Captures at 3× with `html2canvas`, then writes the result as a JPEG onto an 11×8.5 in landscape jsPDF page and saves it as `Certificate - {Course Title}.pdf`.
+   - The title keeps its original case, spaces and dashes.
+   - Characters that aren't allowed in Windows or macOS file names (`\ / : * ? " < > |`) are replaced with `_`.
+   - The title is capped at 150 characters.
+   - The name is built in `LXP_Certificate_Widget::certificate_filename()`.
 
 The PDF is an image, so its text is not selectable. That is the cost of exact fidelity.
 

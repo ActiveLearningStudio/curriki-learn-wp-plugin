@@ -127,7 +127,7 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 				'email'     => '',
 				'school'    => '',
 				'date'      => '',
-				'filename'  => 'certificate.pdf',
+				'filename'  => $this->certificate_filename( 'Grant Application Course' ),
 			] );
 			return;
 		}
@@ -180,8 +180,27 @@ class LXP_Certificate_Widget extends \Elementor\Widget_Base {
 			'email'     => $details['email'],
 			'school'    => $details['school'],
 			'date'      => $repo->format_completion_date( $end_time ),
-			'filename'  => sanitize_title( $course->post_title ) . '-certificate.pdf',
+			'filename'  => $this->certificate_filename( $course->post_title ),
 		] );
+	}
+
+	/**
+	 * Presentable PDF file name: "Certificate - {Course Title}.pdf".
+	 *
+	 * Keeps the title as authored (case, spaces, dashes). Only characters that
+	 * Windows/macOS reject in file names are swapped for "_", and the result is
+	 * capped well under the 255-byte file-name limit.
+	 */
+	private function certificate_filename( $course_title ) {
+		$title = html_entity_decode( wp_strip_all_tags( (string) $course_title ), ENT_QUOTES, 'UTF-8' );
+		$title = preg_replace( '/[\\\\\/:*?"<>|\x00-\x1F\x7F]/u', '_', $title );
+		$title = trim( preg_replace( '/\s+/u', ' ', $title ), " ._" );
+
+		if ( function_exists( 'mb_substr' ) && mb_strlen( $title ) > 150 ) {
+			$title = rtrim( mb_substr( $title, 0, 150 ), " ._" );
+		}
+
+		return 'Certificate - ' . ( '' !== $title ? $title : 'Course' ) . '.pdf';
 	}
 
 	private function render_notice( $html ) {
