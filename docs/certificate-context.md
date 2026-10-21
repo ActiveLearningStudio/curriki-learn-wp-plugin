@@ -80,6 +80,13 @@ Unflagged courses never set the static, so they keep LearnPress's normal redirec
   - The inline logo SVG moved to `assets/img/` and is shown with an `<img>`. Its viewBox was extended from 204 to 210 units tall: the design draws the "g" descender past the viewBox using `overflow:visible`, which an `<img>` clips. The scale and position are unchanged.
   - The seal `<svg>` is wrapped in `<div class="seal">`, and the design's `.seal` rule now positions that wrapper. **html2canvas silently drops an absolutely positioned inline `<svg>` from the capture.** It still shows on screen, which is why this only showed up in the PDF. Any new decorative SVG needs the same wrapper treatment.
   - Dynamic text is substituted in: band label, tagline and URL; pill; course title; subtitle; input values.
+- **Course title.** The title comes from `post_title` run through `the_title`, not from `get_the_title()`. That function prepends "Private:" or "Protected:" for non-public courses, which must never appear on a certificate.
+- **Long course titles.** The design's course card is a fixed 132px tall, sized for a short title.
+  - `fitCourseTitle()` in `lxp-certificate.js` steps the `h2` font size down from the design's 30px, to a minimum of 14px, until the title and subtitle fit inside the card with 12px to spare above and below.
+  - The size is set inline, so the PDF capture clone inherits it.
+  - It runs again after the font loads.
+  - Short titles never shrink.
+  - The only CSS this adds outside the design is `.card-text { min-width:0; overflow-wrap:anywhere }`.
 - `lxp-certificate.css` copies the design's values unchanged. Only the selectors are scoped. Its extra theme-proofing resets give back the defaults a bare `<body>` would provide.
 - The font family is renamed `LXP Cert Montserrat` so it cannot collide with a theme's Montserrat.
 
