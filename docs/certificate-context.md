@@ -13,10 +13,16 @@ A learner who finishes **and passes** a course that an author has flagged **Issu
 ## Flow
 
 1. An author ticks **Issue certificate** in the **Curriki Certificate** meta box on the course edit screen. The same box has an optional **Certificate subtitle**.
+   - The box is **ticked by default on a new course**, meaning an `auto-draft` that has never been saved.
+   - Existing courses show what is actually stored. Missing meta still means "off", so older courses never start issuing certificates until someone saves them with the box ticked.
 2. An admin picks the certificate page under **Curriki Learn → Certificates**, and places the **LXP Certificate** Elementor widget on that page.
 3. The learner presses LearnPress's **Finish** button and lands on `/{certificate-page}/?course_id=X`.
 4. The widget renders the certificate, prefilled with the learner's saved details or with best guesses from their profile.
 5. **Download PDF** first saves through `POST /lms/v1/certificate/save`, then captures the certificate in the browser.
+
+Every widget state, including the notices, ends with a **help note**: "Having trouble getting your certificate? Send an email to grants@curriki.org", with the address as a `mailto:` link.
+- Both the text and the email are widget controls. Leaving both empty hides the note.
+- The note sits outside `.cert`, so it never appears in the PDF.
 
 Two links lead back to the certificate page later:
 - a **Certificate** link on the course's card in the *LXP Student Courses* widget
