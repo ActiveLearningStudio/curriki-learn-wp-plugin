@@ -248,6 +248,7 @@ class Tiny_LXP_Platform
         $this->loader->add_action('save_post_lp_course', $course_extension, 'save_course_outcome_meta', 10, 2);
         $this->loader->add_action('save_post_lp_course', $course_extension, 'save_course_audience_terms', 20, 2);
         $this->loader->add_action('save_post_lp_course', $course_extension, 'save_course_certificate_meta', 20, 2);
+        $this->loader->add_action('save_post_lp_course', $course_extension, 'save_course_deploy_button_meta', 20, 2);
         // Certificates: send the learner to the certificate page after finishing a
         // flagged course — see TL_LearnPress_Course_Extension::on_course_finished().
         $this->loader->add_action('learn-press/user-course-finished', $course_extension, 'on_course_finished', 10, 2);

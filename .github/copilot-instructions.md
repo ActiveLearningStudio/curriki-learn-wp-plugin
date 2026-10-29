@@ -156,6 +156,7 @@ Designed for Elementor Theme Builder **single `lp_course` templates**. Resolves 
 | `{{lp_course_description}}` | `post_content` via `apply_filters('the_content', ...)` with `<style>` block protection |
 | `{{#lp_course_tags}}...{{lp_course_tag}}...{{/lp_course_tags}}` | Per-tag repeat loop |
 | `{{#lp_course_sections}}...{{/lp_course_sections}}` | Per-section repeat loop |
+| `{{#lp_course_control_deploy}}...{{/lp_course_control_deploy}}` | Kept unless `lxp_course_hide_deploy` meta is `'1'` ("Curriki Deploy Button" meta box, ticked = show by default) |
 
 Section loop inner tokens: `{{lp_section_number}}` (zero-padded), `{{lp_section_index}}`, `{{lp_section_title}}`, `{{lp_section_first_lesson_title}}`, `{{lp_section_first_lesson_excerpt}}`, `{{lp_section_first_lesson_url}}`. Conditionals: `{{#lp_section_is_last}}`, `{{#lp_section_is_not_last}}`.
 

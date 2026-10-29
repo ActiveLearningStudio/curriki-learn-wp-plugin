@@ -38,6 +38,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  *  {{lp_course_outcome}}       — Course outcome (from lxp_course_outcome post meta)
  *  {{lp_course_description}}    — Full course description (WYSIWYG post_content, rendered)
  *
+ * Conditional blocks (keep/strip per course):
+ *  {{#lp_course_control_deploy}}...{{/lp_course_control_deploy}}
+ *    — Kept unless "Show 'Deploy to learners' button" is unticked on the course
+ *      (lxp_course_hide_deploy post meta = '1').
+ *
  * Section loop (iterates LP course sections ordered by section_order ASC):
  *  {{#lp_course_sections}}...{{/lp_course_sections}}
  *    Inner tokens per iteration:
@@ -112,6 +117,7 @@ class LXP_Course_HTML_Widget extends Widget_Base {
 					'  {{lp_course_tags_loop}}<span>{{tag}}</span>{{/lp_course_tags_loop}}',
 					'  {{lp_course_outcome}}       — Course outcome',
 					'  {{lp_course_description}}   u{2014} Course description (full)',
+					'  {{#lp_course_control_deploy}}<a href="...">Deploy to learners</a>{{/lp_course_control_deploy}} — shown unless hidden on the course',
 					'  {{#lp_course_sections}}<div>{{lp_section_number}} {{lp_section_title}} {{lp_section_first_lesson_title}} <a href="{{lp_section_first_lesson_url}}">Preview</a></div>{{/lp_course_sections}}',
 				] ),
 				'dynamic'     => [ 'active' => false ],
@@ -207,6 +213,29 @@ class LXP_Course_HTML_Widget extends Widget_Base {
 		}
 
 		return $html;
+	}
+
+	/**
+	 * Keep or strip {{#lp_course_control_deploy}}...{{/lp_course_control_deploy}} blocks.
+	 *
+	 * Shown unless the course's "Curriki Deploy Button" meta box was unticked.
+	 *
+	 * @param string $html      Raw widget HTML.
+	 * @param int    $course_id Course post ID.
+	 * @return string
+	 */
+	private function replace_course_deploy_control( $html, $course_id ) {
+		if ( strpos( $html, '{{#lp_course_control_deploy}}' ) === false ) {
+			return $html;
+		}
+
+		$show = '1' !== (string) get_post_meta( $course_id, 'lxp_course_hide_deploy', true );
+
+		return preg_replace(
+			'/\{\{#lp_course_control_deploy\}\}(.*?)\{\{\/lp_course_control_deploy\}\}/s',
+			$show ? '$1' : '',
+			$html
+		);
 	}
 
 	/**
@@ -470,6 +499,7 @@ class LXP_Course_HTML_Widget extends Widget_Base {
 		$course_tags = $this->get_course_tags( $course->get_id() );
 		$html        = $this->replace_course_tag_loops( $html, $course_tags );
 		$html        = $this->replace_course_section_loops( $html, $course->get_id() );
+		$html        = $this->replace_course_deploy_control( $html, $course->get_id() );
 		$map         = $this->build_token_map( $course, $course_tags );
 		$output      = str_replace( array_keys( $map ), array_values( $map ), $html );
 

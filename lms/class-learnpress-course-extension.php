@@ -100,6 +100,7 @@ class TL_LearnPress_Course_Extension {
 		$this->course_outcome_metabox();
 		$this->course_audience_metabox();
 		$this->course_certificate_metabox();
+		$this->course_deploy_button_metabox();
 	}
 
 	public function course_outcome_metabox() {
@@ -326,6 +327,65 @@ class TL_LearnPress_Course_Extension {
 			delete_post_meta( $post_id, TL_Certificate_Repository::META_SUBTITLE );
 		} else {
 			update_post_meta( $post_id, TL_Certificate_Repository::META_SUBTITLE, $subtitle );
+		}
+	}
+
+	public function course_deploy_button_metabox() {
+		$this->add_meta_box( array(
+			'lxp-course-deploy-button',
+			esc_html__( 'Curriki Deploy Button', 'tiny-lxp-platform' ),
+			array( $this, 'course_deploy_button_metabox_html' ),
+			TL_COURSE_CPT,
+			'side',
+			'default',
+		) );
+	}
+
+	public function course_deploy_button_metabox_html( $post = null ) {
+		// Shown unless explicitly hidden — absent meta means "show", so new
+		// courses start ticked and existing courses keep the button.
+		$show = true;
+		if ( $post && isset( $post->ID ) ) {
+			$show = '1' !== (string) get_post_meta( $post->ID, 'lxp_course_hide_deploy', true );
+		}
+
+		wp_nonce_field( 'save_lxp_course_deploy_button', 'lxp_course_deploy_button_nonce' );
+		?>
+		<p style="margin-top:0;">
+			<label>
+				<input type="checkbox" name="lxp_course_show_deploy" value="1" <?php checked( $show ); ?> />
+				<?php echo esc_html__( "Show 'Deploy to learners' button", 'tiny-lxp-platform' ); ?>
+			</label>
+		</p>
+		<p style="margin-top:8px;color:#666;">
+			<?php echo esc_html__( 'Controls the lp_course_control_deploy block in the Course HTML widget. Untick to hide that block on this course.', 'tiny-lxp-platform' ); ?>
+		</p>
+		<?php
+	}
+
+	public function save_course_deploy_button_meta( $post_id = null, $post = null ) {
+		$post_id = absint( $post_id );
+		if ( $post_id <= 0 ) {
+			return;
+		}
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+		if ( empty( $post ) || ! isset( $post->post_type ) || $post->post_type !== TL_COURSE_CPT ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+		if ( ! isset( $_POST['lxp_course_deploy_button_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['lxp_course_deploy_button_nonce'] ) ), 'save_lxp_course_deploy_button' ) ) {
+			return;
+		}
+
+		// Store only the opt-out, so absent meta keeps meaning "show".
+		if ( empty( $_POST['lxp_course_show_deploy'] ) ) {
+			update_post_meta( $post_id, 'lxp_course_hide_deploy', '1' );
+		} else {
+			delete_post_meta( $post_id, 'lxp_course_hide_deploy' );
 		}
 	}
 
